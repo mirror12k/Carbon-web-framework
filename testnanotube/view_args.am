@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<body>
+<?perl
+
+
+if (defined $runtime->query_form) {
+	echo "query args:", "\n";
+	for my $key (keys %{$runtime->query_form}) {
+		echo "<li>$key => ", $runtime->query_form->{$key}, "</li>\n";
+	}
+}
+
+if (defined $runtime->post_form) {
+	echo "post args:", "\n";
+	for my $key (keys %{$runtime->post_form}) {
+		echo "<li>$key => ", $runtime->post_form->{$key}, "</li>\n";
+	}
+}
+
+?>
+
+<form method="POST">
+<input type="text" name="test" placeholder="test" />
+<input type="hidden" name="test_hidden" value="LOL" />
+<input type="password" name="passy" value="" />
+<button>submit</button>
+</form>
+</body>
+</html>

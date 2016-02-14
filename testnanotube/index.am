@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+	<body>
+		<?perl
+			if ($runtime->request->method eq 'GET') {
+				?>
+				<p>please enter your value:</p>
+				<form method="POST">
+				<input type="text" name="value" />
+				<button>submit</button>
+				</form>
+				<?perl
+			} elsif ($runtime->request->method eq 'POST') {
+				echo '<p>You entered: ';
+				echo $runtime->request->content;
+				echo '</p>';
+			}
+
+		?>
+	</body>
+</html>

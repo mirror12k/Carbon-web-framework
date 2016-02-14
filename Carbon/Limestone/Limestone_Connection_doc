@@ -1,0 +1,13 @@
+
+
+a limestone connection is started by sending a GET request to '/' via HTTP/1.1 with a 'Connection' header of 'Upgrade' and an 'Upgrade' header of 'limestone-database-connection'. a payload of a JSON object with settings must be sent, even if the settings are empty.
+
+# TODO: user and hashed password specification in the headers
+
+
+a successful connection will have the server send a '101 Switching Protocols' with a 'Connection' header of 'Upgrade' and an 'Upgrade' header of 'limestone-database-connection' with a payload of a JSON object with the chosen connection settings
+
+# perhaps support XML and YAML?
+
+after the successful connection response, the connection is officially started. limestone connection packets consist of a 2 byte NETWORK ORDER length header (the length of the length header will be specifiable in the intial connection) and then length # of bytes of payload. payload would be a perl FreezeThaw frozen hash ref (or a JSON object if the setting was specified) with the request details
+

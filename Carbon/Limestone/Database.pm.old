@@ -1,0 +1,358 @@
+package Carbon::Limestone::Database;
+use strict;
+use warnings;
+
+
+use feature 'say';
+
+
+use File::Map qw/ map_file unmap sync lock_map wait_until notify /;
+use IO::File;
+use threads::shared;
+# using the synchronized method functionality requires that the object be shared
+use Thread::Synchronized;
+
+
+
+my $global_filemap;
+
+
+sub get_global_filemap : lvalue {
+	my ($self) = @_;
+	# return $self->{global_filemap};
+	return $global_filemap;
+}
+
+sub new {
+	my $class = shift;
+	my %args = @_;
+	my $self = bless {}, $class;
+	share($self); # this must be done first thing
+
+
+	$self->debug($args{debug} // 0);
+
+	$self->database_filepath($args{filepath} // die "database filepath required!");
+	$self->version(int ($args{version} // 1));
+	$self->file_magic_identifier($args{file_magic_identifier} // "\x00\$ls"); # 4 byte identifier (tried to make it unique)
+
+	if (not -e $self->database_filepath) {
+		$self->warn(1, 'database file not found, creating new database "'.$self->database_filepath.'"');
+		$self->create_database_file;
+	}
+	$self->open_database;
+
+	$self->test;
+
+	return $self
+}
+
+
+
+sub debug { @_ > 1 ? $_[0]{debug} = $_[1] : $_[0]{debug} }
+sub file_magic_identifier { @_ > 1 ? $_[0]{limestone_database__file_magic_identifier} = $_[1] : $_[0]{limestone_database__file_magic_identifier} }
+sub version { @_ > 1 ? $_[0]{limestone_database__version} = $_[1] : $_[0]{limestone_database__version} }
+sub database_filemap { @_ > 1 ? $_[0]{limestone_database__database_filemap} = $_[1] : $_[0]{limestone_database__database_filemap} }
+sub database_file_size { @_ > 1 ? $_[0]{limestone_database__database_file_size} = $_[1] : $_[0]{limestone_database__database_file_size} }
+sub database_filepath { @_ > 1 ? $_[0]{limestone_database__database_filepath} = $_[1] : $_[0]{limestone_database__database_filepath} }
+sub database_memory_first_block_pointer {
+	@_ > 1 ? $_[0]{limestone_database__database_memory_first_block_pointer} = $_[1] : $_[0]{limestone_database__database_memory_first_block_pointer}
+}
+sub database_memory_last_block_pointer {
+	@_ > 1 ? $_[0]{limestone_database__database_memory_last_block_pointer} = $_[1] : $_[0]{limestone_database__database_memory_last_block_pointer}
+}
+sub database_memory_first_free_block_pointer {
+	@_ > 1 ? $_[0]{limestone_database__database_memory_first_free_block_pointer} = $_[1] : $_[0]{limestone_database__database_memory_first_free_block_pointer}
+}
+
+
+
+
+
+sub warn {
+	my ($self, $level, $message) = @_;
+	if ($self->{debug} and $self->{debug} <= $level) {
+		warn "[". (caller)[0] ."]: $message\n";
+	}
+}
+
+
+
+sub create_database_file {
+	my ($self) = @_;
+	my $file = IO::File->new ($self->database_filepath, 'w');
+	my $file_position = 0;
+	$file->print($self->file_magic_identifier);
+	$file_position += length $self->file_magic_identifier;
+	$file->print(pack 'N', int $self->version); # 4 byte version
+	$file_position += 4;
+	$file->print(pack 'N', 1024); # 4 byte file size
+	$file_position += 4;
+
+	$file_position += 12;
+	$file->print(pack 'NN', $file_position + 128, $file_position + 128); # write offset of the first and last memory block
+	$file->print(pack 'N', $file_position + 128); # write offset of the first free memory block
+
+	# 128 bytes of padding in order to allow some more space for patching in more headers if need be
+	$file->print("\0" x 128);
+	$file_position += 128;
+
+	# write first memory block
+	$file_position += 16;
+	# mode, size of rest of file, next pointer, previous pointer
+	$file->print(pack 'NNNN', 0, 1024 - $file_position, 0, 0);
+
+	$file->print("\0" x (1024 - $file_position)); # fill the rest with nulls to initialize
+
+	$file->close;
+}
+
+
+use Data::Dumper;
+sub open_database {
+	my ($self) = @_;
+	map_file $self->get_global_filemap, $self->database_filepath, '+<';
+	# my $file = $self->{limesto/ne_database__database_filemap};
+	# say Dumper \$file;
+	sync $self->get_global_filemap, 1;
+	# share($file);
+	# $self->database_filemap(\$file);
+
+	my $file_position = 0;
+
+	my $file_magic = substr $self->get_global_filemap, $file_position, length $self->file_magic_identifier;
+	$file_position += length $self->file_magic_identifier;
+
+	if ($self->file_magic_identifier ne $file_magic) {
+		die "database file magic doesn't match, expected: [", unpack ('H*', $self->file_magic_identifier), "] got: [", unpack ('H*', $file_magic), "]";
+	}
+
+	my $version = unpack 'N', substr $self->get_global_filemap, $file_position, 4;
+	$file_position += 4;
+
+	if ($version == 1) {
+		# excellent
+	} else {
+		die "database file has an invalid version number [$version]";
+	}
+
+	$self->database_file_size(unpack 'N', substr $self->get_global_filemap, $file_position, 4);
+	$file_position += 4;
+	if ($self->database_file_size != -s $self->database_filepath) {
+		die "database file size inconsistent (size different from alleged size) [", $self->database_file_size, "]";
+	}
+
+	$self->database_memory_first_block_pointer($file_position);
+	$file_position += 4;
+	$self->database_memory_last_block_pointer($file_position);
+	$file_position += 4;
+	$self->database_memory_first_free_block_pointer($file_position);
+	$file_position += 4;
+
+	$self->warn(1, "opened database file ". $self->database_filepath);
+}
+
+
+sub test {
+	my ($self) = @_;
+
+	my $mem = $self->alloc(128);
+	$self->warn(1, "allocated 128 block: $mem");
+	# $self->free($mem);
+	# $self->warn(1, "freed 128 block: $mem");
+
+	# my $file = ${$self->database_filemap};
+
+	say "debug: ", unpack 'H*', substr $self->get_global_filemap, $mem - 16, 16;
+
+	sync $self->get_global_filemap, 1;
+	unmap $self->get_global_filemap;
+	exit;
+}
+
+
+
+sub alloc {
+	my ($self, $size) = @_;
+	my $block = $self->memory_get_set(alloc => $size);
+	return $block + 16 # return the userdata portion of the memory block
+}
+
+sub free {
+	my ($self, $addr) = @_;
+	return $self->memory_get_set(free => $addr)
+}
+
+
+
+sub memory_get_set : synchronized method {
+	my ($self, $mode) = @_;
+	if ($mode eq 'alloc') {
+		return $self->allocate_memory_block($_[2]);
+	} elsif ($mode eq 'free') {
+		return $self->free_memory_block($_[2]);
+	}
+}
+
+
+# allocates a memory block of given or greater size
+# if the first block of sufficient size is too big, it will be split into 2 smaller blocks
+sub allocate_memory_block {
+	my ($self, $size) = @_;
+
+	my $allocated;
+	# my $file = $self->database_filemap;
+	# sync $self->get_global_filemap, 1;
+	my $block = $self->get_set_first_free_memory_block;
+
+	while (not defined $allocated and $block != 0) {
+		my $mode = unpack 'N', substr $self->get_global_filemap, $block, 4;
+		if (0 == ($block & 1)) {
+			my $block_size = unpack 'N', substr $self->get_global_filemap, $block + 4, 4;
+			if ($block_size >= $size and $self->set_memory_block_mode_taken($block)) {
+				$allocated = $block;
+			}
+		}
+		$block = unpack 'N', substr $self->get_global_filemap, $block + 8, 4;
+	}
+
+	# if we got a block, check its size and split the block into two if it's too big
+	if (defined $allocated) {
+		$self->warn(1, "got allocated block: $allocated");
+		my $block_size = unpack 'N', substr $self->get_global_filemap, $allocated + 4, 4;
+		if ($block_size >= $size + 128) {
+
+			# get the new block pointer
+			my $new_block = $allocated + 16 + $size + 64;
+			$self->warn(1, "splitting new block: $new_block");
+			my $next = unpack 'N', substr $self->get_global_filemap, $allocated + 8, 4;
+
+			substr $self->get_global_filemap, $new_block, 4, pack 'N', 0; # write the mode
+			substr $self->get_global_filemap, $new_block + 4, 4, pack 'N', $block_size - $size - 16 - 64; # write the size
+			substr $self->get_global_filemap, $new_block + 8, 4, pack 'N', $next; # write the next
+			substr $self->get_global_filemap, $new_block + 12, 4, pack 'N', $allocated; # write the prev
+			
+			substr $self->get_global_filemap, $allocated + 4, 4, pack 'N', $size + 64; # rewrite the size on the allocated block
+			substr $self->get_global_filemap, $allocated + 8, 4, pack 'N', $new_block; # rewrite the next
+
+			if ($next != 0) { # if the next block exists
+				substr $self->get_global_filemap, $next + 12, 4, pack 'N', $new_block; # rewrite the prev on the block after the new block
+			} else { # otherwise this must be the last block
+				$self->get_set_last_memory_block($new_block);
+			}
+
+			$block = $new_block;
+		}
+	}
+
+	while ($block != 0) {
+		my $mode = unpack 'N', substr $self->get_global_filemap, $block, 4;
+		if (0 == ($mode & 1)) {
+			last;
+		} else {
+			$block = unpack 'N', substr $self->get_global_filemap, $block + 8, 4;
+		}
+	}
+	$self->warn(1, "setting first free: $block");
+	$self->get_set_first_free_memory_block($block);
+	
+
+
+	return $allocated
+}
+
+
+# frees a block to be allocated again
+# if the next block is also free, it tries to merge them together
+# if the previous block is also free, it tries to merge them together
+sub free_memory_block {
+	my ($self, $mem_block) = @_;
+	# my $file = ${$self->database_filemap};
+
+	my $next = unpack 'N', substr $self->get_global_filemap, $mem_block + 8, 4;
+	if ($next != 0) {
+		# see if the next block is also free
+		my $next_mode = unpack 'N', substr $self->get_global_filemap, $next, 4;
+		if (0 == (1 & $next_mode) and $self->set_memory_block_mode_taken($next)) {
+			# to merge the next block, we simply expand this block's size to encompass it's size
+			my $size = unpack 'N', substr $self->get_global_filemap, $mem_block + 4, 4;
+			my $next_size = unpack 'N', substr $self->get_global_filemap, $next + 4, 4;
+			# merge the block sizes
+			$size += 16 + $next_size;
+			substr $self->get_global_filemap, $mem_block + 4, 4, pack 'N', $size;
+			# we don't need to free the next block that we took because its now just part of the userspace of this block
+		}
+	}
+
+	my $prev = unpack 'N', substr $self->get_global_filemap, $mem_block + 12, 4;
+	if ($prev != 0) {
+		# see if the prev block is also free
+		my $prev_mode = unpack 'N', substr $self->get_global_filemap, $prev, 4;
+		if (0 == (1 & $prev_mode) and $self->set_memory_block_mode_taken($prev)) {
+			my $size = unpack 'N', substr $self->get_global_filemap, $mem_block + 4, 4;
+			my $prev_size = unpack 'N', substr $self->get_global_filemap, $prev + 4, 4;
+			# merge the block sizes
+			$prev_size += 16 + $size;
+			substr $self->get_global_filemap, $prev + 4, 4, pack 'N', $size;
+			$mem_block = $prev;
+		}
+	}
+
+	# free the block
+	my $mode = unpack 'N', substr $self->get_global_filemap, $mem_block, 4;
+	$mode &= 0xFFFFFFFE;
+	substr $self->get_global_filemap, $mem_block, 4, pack 'N', $mode;
+
+
+	my $free = $self->get_set_first_free_memory_block;
+	$self->get_set_first_free_memory_block($free) if $free < $mem_block;
+}
+
+
+sub get_set_first_memory_block {
+	my ($self, $new_val) = @_;
+	# my $file = ${$self->database_filemap};
+	if (defined $new_val) {
+		substr $self->get_global_filemap, $self->database_memory_first_block_pointer, 4, pack 'N', $new_val;
+	}
+	return unpack 'N', substr $self->get_global_filemap, $self->database_memory_first_block_pointer, 4;
+}
+
+
+sub get_set_first_free_memory_block {
+	my ($self, $new_val) = @_;
+	# my $file = ${$self->database_filemap};
+	if (defined $new_val) {
+		substr $self->get_global_filemap, $self->database_memory_first_free_block_pointer, 4, pack 'N', $new_val;
+	}
+	return unpack 'N', substr $self->get_global_filemap, $self->database_memory_first_free_block_pointer, 4;
+}
+
+
+sub get_set_last_memory_block {
+	my ($self, $new_val) = @_;
+	# my $file = ${$self->database_filemap};
+	if (defined $new_val) {
+		substr $self->get_global_filemap, $self->database_memory_last_block_pointer, 4, pack 'N', $new_val;
+	}
+	return unpack 'N', substr $self->get_global_filemap, $self->database_memory_last_block_pointer, 4;
+}
+
+
+
+# sets a block's mode to taken unless it is already taken
+# returns 1 if it succeeded in taking the block, 0 otherwise
+sub set_memory_block_mode_taken {
+	my ($self, $mem_block) = @_;
+	# my $file = ${$self->database_filemap};
+	my $mode = unpack 'N', substr $self->get_global_filemap, $mem_block, 4; # get the block's mode
+	if (0 == (1 & $mode)) { # check that it's not yet taken
+		substr $self->get_global_filemap, $mem_block, 4, pack 'N', ($mode | 1); # write the new mode
+		return 1
+	} else { # the block is already taken, we can't take it now
+		return 0
+	}
+}
+
+
+1;

@@ -1,0 +1,6 @@
+<?perl
+
+$runtime->warn ('redirecting!');
+$runtime->redirect('/');
+
+?>

@@ -1,0 +1,21 @@
+<?perl
+
+package Test_Nanotube::Pack;
+
+
+sub new {
+	my ($class, $tag) = @_;
+	my $self = bless {}, $class;
+
+	$self->tag($tag);
+
+	return $self
+}
+
+sub tag { @_ > 1 ? $_[0]{tag} = $_[1] : $_[0]{tag} }
+
+sub wrap {
+	my ($self, $text) = @_;
+	return "<". $self->tag .">$text</". $self->tag .">";
+}
+

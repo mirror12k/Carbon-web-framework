@@ -1,0 +1,16 @@
+<?perl
+
+package test_include;
+
+
+# say "my runtime is: $runtime";
+# say "context: ", join ', ', keys %{$runtime->{context}};
+
+sub test_function {
+	$runtime->warn("hi there");
+	$runtime->echo ("hi there from an include!\nmy argument: ($_[0])\n");
+}
+
+# say "hello! i'm an include!";
+
+

@@ -1,0 +1,14 @@
+<?perl
+
+
+$runtime->include ("test_include.am");
+
+
+test_include::test_function ('asdf');
+
+my $res = Carbon::Response->new;
+$res->code('600');
+
+echo "yes!";
+
+?>

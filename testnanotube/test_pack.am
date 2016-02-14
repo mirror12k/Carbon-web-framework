@@ -1,0 +1,10 @@
+<?perl
+
+
+my $htmlpack = Test_Nanotube::Pack->new('html');
+my $bodypack = Test_Nanotube::Pack->new('body');
+my $text = Test_Nanotube::Pack->new('h1');
+
+echo ("<!doctype html>\n");
+echo $htmlpack->wrap($bodypack->wrap($text->wrap('hello world!')));
+
