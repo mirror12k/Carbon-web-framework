@@ -208,7 +208,7 @@ sub listen_accept_server_loop {
 			# $socket_data{"$sock"} = ''; # create an empty cache for it
 
 			$self->socket_data->{"$sock"} = { socket => $sock, buffer => '', request => undef };
-			say "new connection: $sock"; # FH DEBUG
+			# say "new connection: $sock"; # FH DEBUG
 		}
 
 		# IO::Select doesn't block unless it has at least 1 socket to check on
@@ -235,7 +235,7 @@ sub listen_accept_server_loop {
 
 				unless (defined $socket_data->{request}) { # otherwise check if it's ready for header processing
 					if ($socket_data->{buffer} =~ /\r?\n\r?\n/) {
-						say "serving request: $fh"; # FH DEBUG
+						# say "serving request: $fh"; # FH DEBUG
 						my ($header, $body) = split /\r?\n\r?\n/, $socket_data->{buffer}, 2;
 						my $req = $self->parse_http_header($header);
 
@@ -317,7 +317,7 @@ sub delete_socket {
 	delete $self->socket_data->{"$sock"}; #delete all of its data
 	# delete $socket_data{"$sock"}; # delete its cache
 	$sock->close; # close it
-	say "socket disconnected: $sock"; # FH DEBUG
+	# say "socket disconnected: $sock"; # FH DEBUG
 }
 
 
