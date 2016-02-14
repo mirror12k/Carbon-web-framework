@@ -176,99 +176,111 @@ sub start_server_socket {
 sub listen_accept_server_loop {
 	my ($self) = @_;
 
-	# my $server_socket = $self->socket;
-	# my $selector = IO::Select->new;
-	# my %socket_data; # data buffer for each socket until the head or body arrives completely
-	# my %socket_request; # request storage for each socket for when the head has arrived, but the body is still transferring
-	# my %socket_jobs; # socket storage for each running job to prevent the socket from being garbage collected
-
 	# while the server is running
 	while ($self->server_running) {
+		# update the thread_pool to receive any completed jobs
+		$self->update_thread_pool;
+		# update the server socket to receive any new connections
+		$self->accept_new_connections;
+		# update sockets to receive any new messages and dispatch any jobs necessary
+		$self->update_sockets;
+	}
+}
 
-		# check any thread pool jobs that have completed
-		foreach my $jobid ($self->thread_pool->results) {
-			# reclaim any socket whose job has completed
-			# say "job [$jobid] completed!"; # JOBS DEBUG
-			my $sock = delete $self->socket_jobs->{$jobid};
-			$sock = $self->socket_data->{$sock}{socket};
-			if ($self->thread_pool->result($jobid)) {
-				# re-add it to the selector if the job completed with true status
-				$self->socket_selector->add($sock);
-			} else {
-				# if job returned with false status, we must close the socket and delete record of it
-				$self->delete_socket($sock);
-			}
+
+sub update_thread_pool {
+	my ($self) = @_;
+
+	# check any thread pool jobs that have completed
+	foreach my $jobid ($self->thread_pool->results) {
+		# reclaim any socket whose job has completed
+		# say "job [$jobid] completed!"; # JOBS DEBUG
+		my $sock = delete $self->socket_jobs->{$jobid};
+		$sock = $self->socket_data->{$sock}{socket};
+		if ($self->thread_pool->result($jobid)) {
+			# re-add it to the selector if the job completed with true status
+			$self->socket_selector->add($sock);
+		} else {
+			# if job returned with false status, we must close the socket and delete record of it
+			$self->delete_socket($sock);
 		}
-		
-		# get any newly accepted sockets
-		while (my $sock = $self->server_socket->accept) {
-			# say "debug accepting";
-			$sock->blocking(0); # set it to no blocking
-			$self->socket_selector->add($sock); # add it to the selector
-			# $socket_data{"$sock"} = ''; # create an empty cache for it
+	}
+}
 
-			$self->socket_data->{"$sock"} = { socket => $sock, buffer => '', request => undef };
-			# say "new connection: $sock"; # FH DEBUG
-		}
+sub accept_new_connections {
+	my ($self) = @_;
 
-		# IO::Select doesn't block unless it has at least 1 socket to check on
-		# so we need to sleep in that case to prevent 100% cpu usage
-		usleep (10 * 1000) unless $self->socket_selector->count;
+	# get any newly accepted sockets
+	while (my $sock = $self->server_socket->accept) {
+		$sock->blocking(0); # set it to non-blocking
+		$self->socket_selector->add($sock); # add it to the selector
 
-		# say "active socket jobs: ", scalar keys %socket_jobs; # JOBS DEBUG
+		$self->socket_data->{"$sock"} = { socket => $sock, buffer => '', request => undef };
+		# say "new connection: $sock"; # FH DEBUG
+	}
+}
 
-		# the selector will give us a list of sockets that are ready to read
-		foreach my $fh ($self->socket_selector->can_read(10 / 1000)) {
-			# say "debug peaking";
-			$fh->recv(my $data, 1, MSG_PEEK | MSG_DONTWAIT);
-			if ($data eq '') { # if it's a disconnected socket
-				$self->delete_socket($fh);
-			} else { # else if it's a message
-				my $socket_data = $self->socket_data->{"$fh"};
-				# read until there is nothing left to read
-				my $read = 1;
-				while (defined $read and $read > 0) {
-					# say "debug read loop: $read";
-					# 4096 * 16
-					$read = $fh->read($socket_data->{buffer}, 10, length $socket_data->{buffer});
-				} 
+sub update_sockets {
+	my ($self) = @_;
 
-				unless (defined $socket_data->{request}) { # otherwise check if it's ready for header processing
-					if ($socket_data->{buffer} =~ /\r?\n\r?\n/) {
-						# say "serving request: $fh"; # FH DEBUG
-						my ($header, $body) = split /\r?\n\r?\n/, $socket_data->{buffer}, 2;
-						my $req = $self->parse_http_header($header);
+	# IO::Select doesn't block unless it has at least 1 socket to check on
+	# so we need to sleep in that case to prevent 100% cpu usage
+	usleep (10 * 1000) unless $self->socket_selector->count;
 
-						# if the request processing failed, it means that it was an invalid request
-						if (not defined $req) {
-							$self->delete_socket($fh);
-						} else {
-							$socket_data->{request} = $req;
-							$socket_data->{buffer} = $body;
-						}
+	# say "active socket jobs: ", scalar keys %socket_jobs; # JOBS DEBUG
+
+	# the selector will give us a list of sockets that are ready to read
+	foreach my $fh ($self->socket_selector->can_read(10 / 1000)) {
+		$fh->recv(my $data, 1, MSG_PEEK | MSG_DONTWAIT);
+		if ($data eq '') { # if it's a disconnected socket
+			$self->delete_socket($fh);
+		} else { # else if it's a message
+			my $socket_data = $self->socket_data->{"$fh"};
+			# read until there is nothing left to read
+			my $read = 1;
+			while (defined $read and $read > 0) {
+				# say "debug read loop: $read";
+				$read = $fh->read($socket_data->{buffer}, 4096 * 16, length $socket_data->{buffer});
+			} 
+
+			unless (defined $socket_data->{request}) { # otherwise check if it's ready for header processing
+				if ($socket_data->{buffer} =~ /\r?\n\r?\n/) {
+					# say "serving request: $fh"; # FH DEBUG
+					my ($header, $body) = split /\r?\n\r?\n/, $socket_data->{buffer}, 2;
+					my $req = $self->parse_http_header($header);
+
+					# if the request processing failed, it means that it was an invalid request
+					if (not defined $req) {
+						$self->delete_socket($fh);
+					} else {
+						$socket_data->{request} = $req;
+						$socket_data->{buffer} = $body;
 					}
 				}
+			}
 
-				if (defined $socket_data->{request}) { # if it already has completed the header transfer
-					# say "got some body data: '", $socket_data->{buffer}, "'";
-					my $req = $socket_data->{request};
-					if (defined $req->header('content-length')) {
-						if ($socket_data->{request}->header('content-length') <= length $socket_data->{buffer}) {
-							# set the request content
-							$req->content(substr $socket_data->{buffer}, 0, $socket_data->{request}->header('content-length'));
-							$socket_data->{buffer} = substr $socket_data->{buffer}, $socket_data->{request}->header('content-length');
+			if (defined $socket_data->{request}) { # if it already has completed the header transfer
+				my $req = $socket_data->{request};
+				if (defined $req->header('content-length')) {
+					# check if the whole body has arrived yet
+					if ($socket_data->{request}->header('content-length') <= length $socket_data->{buffer}) {
+						# set the request content
+						$req->content(substr $socket_data->{buffer}, 0, $socket_data->{request}->header('content-length'));
+						$socket_data->{buffer} = substr $socket_data->{buffer}, $socket_data->{request}->header('content-length');
 
-							# start the job
-							$self->schedule_job($fh, $req); #$self->thread_pool->job(fileno $fh, $req);
-						}
-					} else {
-						$self->schedule_job($fh, $req); #$self->thread_pool->job(fileno $fh, $req);
+						# start the job
+						$self->schedule_job($fh, $req);
 					}
+				} else {
+					# if there is no body, start the job immediately
+					$self->schedule_job($fh, $req);
 				}
 			}
 		}
 	}
 }
+
+
 
 
 # transforms a raw http header string into a Request object as well as parsing the uri
