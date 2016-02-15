@@ -10,7 +10,6 @@ use Carp;
 use IO::Socket::INET;
 use IO::Select;
 use Thread::Pool;
-use threads::shared;
 use Time::HiRes 'usleep';
 
 # use HTTP::Request;
@@ -22,8 +21,36 @@ use Carbon::Response;
 
 
 
+=pod
+
+=head1 What is Carbon?
+Carbon is a flexible and easily extendable http server architecture
+
+using IO::Select, it is resistent to typical denial of service via the slow-loris attack
+Thread::Pool ensures that requests are completed quickly and in parallel
+
+Carbon abstracts away any necessary network layer functionality so that a router can focus on the http details
+comes with the routers Carbon::Fiber and Carbon::Nanotube, however anyone can implement their own router with just a few methods
+
+Carbon::Fiber acts as a general router with regex-routing to functions, directories, and route mapping
+Carbon::Nanotube provides bindings for dynamic file compilation and execution for a fully functional web-stack
+comes with Anthracite which acts as a compiler and a runtime for dynamic files invoked by Carbon::Nanotube
+and allows plugins such as Limestone to provide additional functionality
+
+=head2 prerequisites
+Carp
+IO::Socket::INET
+IO::Select
+Thread::Pool
+Time::HiRes
+
+=cut
+
+
+
+
 # TODO:
-# caching routes
+# caching data
 # route shortcutting
 # route excluding
 
@@ -50,7 +77,7 @@ use Carbon::Response;
 # graphene
 
 # carbon aerogel
-# carbon fibre-reinforced carbon ( aka carbon-carbon )
+# carbon fibre-reinforced carbon ( aka space carbon )
 
 # diamond
 
@@ -69,7 +96,14 @@ use Carbon::Response;
 
 our $CARBON_DEBUG_VALUE = 1;
 
+=item new()
+initializes a new Carbon server
 
+options:
+debug => debug level
+port => server port
+onerror => subroutine to call when $server->die is called
+=cut
 sub new ($%) {
 	my $class = shift;
 	my %args = @_;
@@ -80,6 +114,7 @@ sub new ($%) {
 	$self->port($args{port} // 2048);
 	$self->onerror($args{onerror} // \&Carp::croak);
 
+	$self->server_running(0);
 	$self->socket_data({});
 	$self->socket_jobs({});
 
@@ -99,24 +134,47 @@ sub die {
 	CORE::die "returning from onerror is not allowed";
 }
 
-
+=item debug
+get/set the debug level
+level 0 means no output
+level 1 produces output from the Carbon package and subclasses
+=cut
 sub debug { @_ > 1 ? $_[0]{debug} = $_[1] : $_[0]{debug} }
 
+=item server_running
+whether the server is currently running
+=cut
 sub server_running { @_ > 1 ? $_[0]{carbon_server__running} = $_[1] : $_[0]{carbon_server__running} }
 
+=item port
+the port the server is (going to) run on
+=cut
 sub port { @_ > 1 ? $_[0]{carbon_server__port} = $_[1] : $_[0]{carbon_server__port} }
 sub server_socket { @_ > 1 ? $_[0]{carbon_server__server_socket} = $_[1] : $_[0]{carbon_server__server_socket} }
 sub socket_selector { @_ > 1 ? $_[0]{carbon_server__socket_selector} = $_[1] : $_[0]{carbon_server__socket_selector} }
+# temporary socket data storage
 sub socket_data { @_ > 1 ? $_[0]{carbon_server__socket_data} = $_[1] : $_[0]{carbon_server__socket_data} }
+# temporary job information storage
 sub socket_jobs { @_ > 1 ? $_[0]{carbon_server__socket_jobs} = $_[1] : $_[0]{carbon_server__socket_jobs} }
 sub thread_pool { @_ > 1 ? $_[0]{carbon_server__thread_pool} = $_[1] : $_[0]{carbon_server__thread_pool} }
+=item onerror
+the function called when a server attempts to die
+Carp::croak by default
+=cut
 sub onerror { @_ > 1 ? $_[0]{carbon_onerror} = $_[1] : $_[0]{carbon_onerror} }
 
+=item router
+the current router used to route http requests
+=cut
 sub router { @_ > 1 ? $_[0]{carbon_server__router} = $_[1] : $_[0]{carbon_server__router} }
 
 
-# public method for triggering the server loop to run
-# NOTE: anything not initialized in the server object before this method is not going to be shared to worker threads
+=item start_server()
+
+public method for triggering the server loop to run
+NOTE: anything not initialized in the server object before this method is not going to be shared to worker threads
+
+=cut
 sub start_server {
 	my ($self) = @_;
 
@@ -183,6 +241,7 @@ sub listen_accept_server_loop {
 		# update the server socket to receive any new connections
 		$self->accept_new_connections;
 		# update sockets to receive any new messages and dispatch any jobs necessary
+		# this method needs to perform some delay operation to prevent 100% cpu usage
 		$self->update_sockets;
 	}
 }
@@ -227,8 +286,6 @@ sub update_sockets {
 	# so we need to sleep in that case to prevent 100% cpu usage
 	usleep (10 * 1000) unless $self->socket_selector->count;
 
-	# say "active socket jobs: ", scalar keys %socket_jobs; # JOBS DEBUG
-
 	# the selector will give us a list of sockets that are ready to read
 	foreach my $fh ($self->socket_selector->can_read(10 / 1000)) {
 		$fh->recv(my $data, 1, MSG_PEEK | MSG_DONTWAIT);
@@ -243,14 +300,16 @@ sub update_sockets {
 				$read = $fh->read($socket_data->{buffer}, 4096 * 16, length $socket_data->{buffer});
 			} 
 
-			unless (defined $socket_data->{request}) { # otherwise check if it's ready for header processing
+			# if there is no request for this socket yet
+			unless (defined $socket_data->{request}) {
+				# otherwise check if it's ready for header processing
 				if ($socket_data->{buffer} =~ /\r?\n\r?\n/) {
 					# say "serving request: $fh"; # FH DEBUG
 					my ($header, $body) = split /\r?\n\r?\n/, $socket_data->{buffer}, 2;
 					my $req = $self->parse_http_header($header);
 
-					# if the request processing failed, it means that it was an invalid request
 					if (not defined $req) {
+						# if the request processing failed, it means that it was an invalid request
 						$self->delete_socket($fh);
 					} else {
 						$socket_data->{request} = $req;
@@ -259,9 +318,11 @@ sub update_sockets {
 				}
 			}
 
-			if (defined $socket_data->{request}) { # if it already has completed the header transfer
+			# if it has completed the header transfer
+			if (defined $socket_data->{request}) {
 				my $req = $socket_data->{request};
-				if (defined $req->header('content-length')) {
+
+				if (defined $req->header('content-length')) { # if it has a content-length
 					# check if the whole body has arrived yet
 					if ($socket_data->{request}->header('content-length') <= length $socket_data->{buffer}) {
 						# set the request content
@@ -299,6 +360,9 @@ sub parse_http_header {
 }
 
 
+# schedules a job for completion by a thread_pool worker
+# also clears the socket's request storage and removes it from the io-selector
+# if it detects that too many jobs are waiting, it will increase the worker count in the thread_pool (up to 64)
 sub schedule_job {
 	my ($self, $sock, $req) = @_;
 
@@ -309,9 +373,9 @@ sub schedule_job {
 	$self->socket_jobs->{$jobid} = "$sock"; # record the jobid for when the job is completed
 
 	my $todo = $self->thread_pool->todo;
-	$todo = "$todo";
-	# $self->warn(1, "jobs todo: ". $todo) if 0 < $todo;
-	if ($todo > 2 * $self->thread_pool->workers and $self->thread_pool->workers < 100) {
+	$todo = "$todo"; # i have no idea why, but the value was acting wierd without it
+
+	if ($todo > 2 * $self->thread_pool->workers and $self->thread_pool->workers < 64) {
 		$self->thread_pool->workers(2 * $self->thread_pool->workers);
 		$self->warn(1, "increased worker count to ". $self->thread_pool->workers);
 	}
@@ -353,12 +417,22 @@ sub cleanup {
 }
 
 
+=item shutdown ()
 
+sets the server to non-running mode
+this will cause the io-loop to exit and enter cleanup() which will collect and close all resources
+if a thread_pool job is hanging, then the cleanup method may wait indefinitely for it to finish
+
+=cut
 sub shutdown {
 	my ($self) = @_;
 
-	$self->warn(1, "shutdown requested");
-	$self->server_running(0);
+	if ($self->server_running) {
+		$self->warn(1, "shutdown requested");
+		$self->server_running(0);
+	} else {
+		$self->die("shutdown called twice");
+	}
 }
 
 
@@ -387,10 +461,14 @@ sub restore_socket {
 	return $sock
 }
 
-# processes the request and sends the response into the socket
-# in this instance, Carbon dispatches the router to execute the request
-# extensions which wish to do something special with the socket would need to
-# override this method to utilize its full potential
+=item serve_http_request()
+
+processes the request and sends the response into the socket
+in this instance, Carbon dispatches the router to execute the request
+extensions which wish to do something special with the socket would need to
+override this method to utilize its full potential
+
+=cut
 sub serve_http_request {
 	my ($self, $sock, $req) = @_;
 
