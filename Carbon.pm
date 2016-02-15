@@ -133,7 +133,7 @@ sub warn {
 
 sub die {
 	my $self = shift;
-	$self->onerror->($self, @_);
+	$self->onerror->("[$self] ", @_);
 	CORE::die "returning from onerror is not allowed";
 }
 
@@ -300,10 +300,13 @@ sub update_sockets {
 			my $socket_data = $self->socket_data->{"$fh"};
 			# read until there is nothing left to read
 			my $read = 1;
+			my $total = 0;
 			while (defined $read and $read > 0) {
-				# say "debug read loop: $read";
 				$read = $fh->read($socket_data->{buffer}, 4096 * 16, length $socket_data->{buffer});
-			} 
+				$total += $read if defined $read;
+				# say "debug read loop: $read";
+			}
+			$self->delete_socket($fh) if $total == 0;
 
 			# if there is no request for this socket yet
 			unless (defined $socket_data->{request}) {
@@ -449,9 +452,9 @@ sub shutdown {
 # returns 1 if the socket should be closed after this request or 0 if it should be kept alive
 sub start_thread {
 	my ($self, $sock_num, $req) = @_;
-	my $sock = $self->restore_socket($sock_num);
 
-	return $self->serve_http_request($sock, $req)
+	my $sock = $self->restore_socket($sock_num);
+	return $self->serve_http_request($sock, $req);
 }
 
 # restores the socket from the file descriptor
