@@ -24,6 +24,7 @@ use Carbon::Response;
 =pod
 
 =head1 What is Carbon?
+
 Carbon is a flexible and easily extendable http server architecture
 
 using IO::Select, it is resistent to typical denial of service via the slow-loris attack
@@ -38,6 +39,7 @@ comes with Anthracite which acts as a compiler and a runtime for dynamic files i
 and allows plugins such as Limestone to provide additional functionality
 
 =head2 prerequisites
+
 Carp
 IO::Socket::INET
 IO::Select
@@ -84,7 +86,7 @@ Time::HiRes
 # limestone -> document database engine
 # fossiliferous limestone
 # coral
-#chalk
+# chalk
 
 # dolomite
 # calcite
@@ -103,6 +105,7 @@ options:
 debug => debug level
 port => server port
 onerror => subroutine to call when $server->die is called
+
 =cut
 sub new ($%) {
 	my $class = shift;
@@ -275,7 +278,7 @@ sub accept_new_connections {
 		$self->socket_selector->add($sock); # add it to the selector
 
 		$self->socket_data->{"$sock"} = { socket => $sock, buffer => '', request => undef };
-		# say "new connection: $sock"; # FH DEBUG
+		say "new connection: $sock"; # FH DEBUG
 	}
 }
 
@@ -288,8 +291,10 @@ sub update_sockets {
 
 	# the selector will give us a list of sockets that are ready to read
 	foreach my $fh ($self->socket_selector->can_read(10 / 1000)) {
-		$fh->recv(my $data, 1, MSG_PEEK | MSG_DONTWAIT);
-		if ($data eq '') { # if it's a disconnected socket
+		my $testread = $fh->read(my $data, 0);
+		# $fh->recv(my $data, 1, MSG_PEEK | MSG_DONTWAIT); # this was the old way to test if it's dead
+		if (not defined $testread) { # if it's a disconnected socket
+		# if ($data eq '') { # if it's a disconnected socket
 			$self->delete_socket($fh);
 		} else { # else if it's a message
 			my $socket_data = $self->socket_data->{"$fh"};
@@ -304,7 +309,7 @@ sub update_sockets {
 			unless (defined $socket_data->{request}) {
 				# otherwise check if it's ready for header processing
 				if ($socket_data->{buffer} =~ /\r?\n\r?\n/) {
-					# say "serving request: $fh"; # FH DEBUG
+					say "serving request: $fh"; # FH DEBUG
 					my ($header, $body) = split /\r?\n\r?\n/, $socket_data->{buffer}, 2;
 					my $req = $self->parse_http_header($header);
 
@@ -393,7 +398,7 @@ sub delete_socket {
 	delete $self->socket_data->{"$sock"}; #delete all of its data
 	# delete $socket_data{"$sock"}; # delete its cache
 	$sock->close; # close it
-	# say "socket disconnected: $sock"; # FH DEBUG
+	say "socket disconnected: $sock"; # FH DEBUG
 }
 
 
@@ -456,7 +461,7 @@ sub restore_socket {
 
 	# reopen the socket using fdopen
 	my $sock = IO::Socket::INET->new;
-	$sock->fdopen($sock_num, 'r'); # even though only 'r' permissions may look wrong, it seems to work just fine, where as 'rw' stalls
+	$sock->fdopen($sock_num, 'r+'); # 'rw' stalls
 
 	return $sock
 }
@@ -488,7 +493,7 @@ sub serve_http_request {
 		$res->header('content-type' => 'text/plain');
 	}
 
-	$sock->send($res->as_string);
+	$sock->print($res->as_string);
 
 	return not $res->is_error
 }
