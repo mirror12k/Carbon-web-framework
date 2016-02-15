@@ -291,59 +291,52 @@ sub update_sockets {
 
 	# the selector will give us a list of sockets that are ready to read
 	foreach my $fh ($self->socket_selector->can_read(10 / 1000)) {
-		my $testread = $fh->read(my $data, 0);
-		# $fh->recv(my $data, 1, MSG_PEEK | MSG_DONTWAIT); # this was the old way to test if it's dead
-		if (not defined $testread) { # if it's a disconnected socket
-		# if ($data eq '') { # if it's a disconnected socket
-			$self->delete_socket($fh);
-		} else { # else if it's a message
-			my $socket_data = $self->socket_data->{"$fh"};
-			# read until there is nothing left to read
-			my $read = 1;
-			my $total = 0;
-			while (defined $read and $read > 0) {
-				$read = $fh->read($socket_data->{buffer}, 4096 * 16, length $socket_data->{buffer});
-				$total += $read if defined $read;
-				# say "debug read loop: $read";
-			}
-			$self->delete_socket($fh) if $total == 0;
+		my $socket_data = $self->socket_data->{"$fh"};
+		# read until there is nothing left to read
+		my $read = 1;
+		my $total = 0;
+		while (defined $read and $read > 0) {
+			$read = $fh->read($socket_data->{buffer}, 4096 * 16, length $socket_data->{buffer});
+			$total += $read if defined $read;
+			# say "debug read loop: $read";
+		}
+		$self->delete_socket($fh) if $total == 0;
 
-			# if there is no request for this socket yet
-			unless (defined $socket_data->{request}) {
-				# otherwise check if it's ready for header processing
-				if ($socket_data->{buffer} =~ /\r?\n\r?\n/) {
-					say "serving request: $fh"; # FH DEBUG
-					my ($header, $body) = split /\r?\n\r?\n/, $socket_data->{buffer}, 2;
-					my $req = $self->parse_http_header($header);
+		# if there is no request for this socket yet
+		unless (defined $socket_data->{request}) {
+			# otherwise check if it's ready for header processing
+			if ($socket_data->{buffer} =~ /\r?\n\r?\n/) {
+				say "serving request: $fh"; # FH DEBUG
+				my ($header, $body) = split /\r?\n\r?\n/, $socket_data->{buffer}, 2;
+				my $req = $self->parse_http_header($header);
 
-					if (not defined $req) {
-						# if the request processing failed, it means that it was an invalid request
-						$self->delete_socket($fh);
-					} else {
-						$socket_data->{request} = $req;
-						$socket_data->{buffer} = $body;
-					}
+				if (not defined $req) {
+					# if the request processing failed, it means that it was an invalid request
+					$self->delete_socket($fh);
+				} else {
+					$socket_data->{request} = $req;
+					$socket_data->{buffer} = $body;
 				}
 			}
+		}
 
-			# if it has completed the header transfer
-			if (defined $socket_data->{request}) {
-				my $req = $socket_data->{request};
+		# if it has completed the header transfer
+		if (defined $socket_data->{request}) {
+			my $req = $socket_data->{request};
 
-				if (defined $req->header('content-length')) { # if it has a content-length
-					# check if the whole body has arrived yet
-					if ($socket_data->{request}->header('content-length') <= length $socket_data->{buffer}) {
-						# set the request content
-						$req->content(substr $socket_data->{buffer}, 0, $socket_data->{request}->header('content-length'));
-						$socket_data->{buffer} = substr $socket_data->{buffer}, $socket_data->{request}->header('content-length');
+			if (defined $req->header('content-length')) { # if it has a content-length
+				# check if the whole body has arrived yet
+				if ($socket_data->{request}->header('content-length') <= length $socket_data->{buffer}) {
+					# set the request content
+					$req->content(substr $socket_data->{buffer}, 0, $socket_data->{request}->header('content-length'));
+					$socket_data->{buffer} = substr $socket_data->{buffer}, $socket_data->{request}->header('content-length');
 
-						# start the job
-						$self->schedule_job($fh, $req);
-					}
-				} else {
-					# if there is no body, start the job immediately
+					# start the job
 					$self->schedule_job($fh, $req);
 				}
+			} else {
+				# if there is no body, start the job immediately
+				$self->schedule_job($fh, $req);
 			}
 		}
 	}
