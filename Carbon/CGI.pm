@@ -5,6 +5,11 @@ use warnings;
 
 use feature 'say';
 
+use IPC::Open2;
+
+
+
+
 
 sub new {
 	my $class = shift;
@@ -57,11 +62,11 @@ sub execute_cgi {
 
 	my $cmd = $self->command_line;
 
-	local %ENV = (
+	my %cgi_env = (
 		GATEWAY_INTERFACE => 'CGI/1.1',
-		PATH_INFO => $req->uri->path,
-		PATH_TRANSLATED => $req->uri->path, # pretend it's the same thing
-		QUERY_STRING => $req->uri->query,
+		PATH_INFO => $req->uri->path // '/',
+		PATH_TRANSLATED => $req->uri->path // '/', # pretend it's the same thing
+		QUERY_STRING => $req->uri->query // '',
 		REMOTE_ADDR => '127.0.0.1',
 		# REMOTE_HOST =>
 		REQUEST_METHOD => $req->method,
@@ -72,17 +77,40 @@ sub execute_cgi {
 		SERVER_PORT => '22222',
 		SERVER_PROTOCOL => $req->protocol,
 		SERVER_SOFTWARE => 'Carbon::CGI/0.01',
+		# required otherwise php cgi refuses to work, i have no clue what it does, doesn't seem to be documented anywhere
 		REDIRECT_STATUS => '',
 	);
 	for my $key (keys %{$req->headers}) {
-		$ENV{'HTTP_' . uc ($key =~ s/-/_/gr)} = join ', ', $req->header($key);
+		$cgi_env{'HTTP_' . uc ($key =~ s/-/_/gr)} = join ', ', $req->header($key);
 	}
-	# while (my ($k, $v) = each %ENV) {
+
+	if (defined $req->header('content-length')) {
+		$cgi_env{CONTENT_LENGTH} = int $req->header('content-length');
+	}
+	if (defined $req->header('content-type')) {
+		$cgi_env{CONTENT_TYPE} = $req->header('content-type');
+	}
+
+	# while (my ($k, $v) = each %cgi_env) {
 	# 	say "env: $k => $v";
 	# }
-	my $envcmd  = 'env -i ' . join ' ', map "'$_=$ENV{$_}'", keys %ENV;
-	# my $output = system "$cmd";
-	my $output = `$envcmd $cmd`;
+	my $envcmd  = 'env -i ' . join ' ', map "'$_=$cgi_env{$_}'", keys %cgi_env;
+
+	# open the process
+	my $pid = open2(my $out, my $in, "$envcmd $cmd") or die "failed to start cgi process";
+	$in->print($req->content) if defined $req->content; # give it the content on stdin
+
+	waitpid($pid, 0); # wait for it to finish
+
+	my $output;
+	do {
+		local $/;
+		$output = <$out>; # get all input
+	};
+	close $in;
+	close $out;
+
+	# process output
 	# say "got output: [$output]";
 	if ($output =~ /\AStatus:\s*/) {
 		$output =~ s/\AStatus:\s*/HTTP\/1.1 /;
@@ -92,6 +120,7 @@ sub execute_cgi {
 		$output = "HTTP/1.1 200 OK\r\n$output";
 	}
 	# say "made: [$output]";
+	# return it as a response
 	return Carbon::Response->parse($output);
 }
 
