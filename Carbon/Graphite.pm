@@ -31,7 +31,7 @@ sub new {
 				my $code =
 "
 ;\$graphite->set_template('$name' => Carbon::Graphite::Template->new( sub {
-my (\$arg) = \@_;
+my (\$self, \$graphite, \$arg) = \@_;
 my \$output = '';
 ";
 				$code .= $engine->compile_graphite ($text);
@@ -153,11 +153,60 @@ sub compile_text {
 	$text =~ s/\A\s+/ /m;
 	$text =~ s/\s+\Z/ /m;
 
-	$text =~ s#\\#\\\\#g;
-	$text =~ s#'#\\'#g;
-	return 
-";\$output .= '$text';
-"
+	my $code = ";\n";
+
+	my $value_regex = qr/
+		\$[a-zA-Z0-9_]+| # variable
+		\d+| # numeric value
+		'[^']*'| # string
+		"[^"]*" # string
+		/msx;
+	while ($text =~ /\G
+			(\$[a-zA-Z0-9_]+)|
+			\@([a-zA-Z0-9_]+)(?:->
+				($value_regex)|
+				\[\s*((?:$value_regex(?:,\s*$value_regex)*\s*(?:,\s*)?)?)\]
+			)?|
+			(.*?((?=[\$\@])|\Z))
+			/msgx) {
+		my ($var, $inc, $inc_val, $inc_list, $html) = ($1, $2, $3, $4, $5);
+		if (defined $var) {
+			$code .= "\$output .= ". $self->compile_inc_val($var) .";\n";
+		} elsif (defined $inc) {
+			if (defined $inc_val) {
+				$code .= "\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_val($inc_val) .");\n";
+			} else {
+				$code .= "\$output .= \$graphite->render_template('$inc');\n";
+			}
+		} else {
+			$html =~ s/\A\s+/ /m;
+			$html =~ s/\s+\Z/ /m;
+			$html =~ s#\\#\\\\#g;
+			$html =~ s#'#\\'#g;
+			$code .= "\$output .= '$html';\n";
+		}
+	}
+	return $code
+}
+
+sub compile_inc_val {
+	my ($self, $val) = @_;
+	if ($val =~ /\A\$([a-zA-Z0-9_]+)\Z/) {
+		my $name = $1;
+		if ($name ne '_') {
+			return "\$arg->{$name}";
+		} else {
+			return '$arg';
+		}
+	} elsif ($val =~ /\A\d+\Z/) {
+		return $val;
+	} elsif ($val =~ /\A'[^']*'\Z/) {
+		return $val;
+	} elsif ($val =~ /\A"([^"]*)"\Z/) {
+		return "'$1'";
+	} else {
+		die "unknown value to compile: '$val'";
+	}
 }
 
 

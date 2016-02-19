@@ -7,29 +7,48 @@
 		<h1>hello world</h1>
 	/#
 
+	#template my_arg
+		<p> hello, my arg is <i>$_</i></p>
+	/#
+
 	#template argy
 		<p>
 			<h1>$name</h1>
-			<li>job: $job</li>
-			<li>age: $age</li>
-			<li>price: $price</li>
+			<ul>
+				<li>job: $job</li>
+				<li>age: $age</li>
+				<li>price: $price</li>
+			</ul>
 		</p>
 	/#
 
 	#template loopy
+		<ul>
 		#foreach $_
-			<p>$_</p>
+			<li>$_</li>
 		/#
+		</ul>
 	/#
+
+	#template multi_yeti
+		@yeti
+		@yeti
+		@yeti
+	/#
+
+	@my_arg->'testval'
+	@my_arg->'hello world'
+	@multi_yeti
 
 ?>
 
 <?perl
-	echo $graphite->render_template('yeti');
 	
 	echo $graphite->render_template(argy => { name => 'john', job => 'programmer', age => 35, price => 15000});
 
 	echo $graphite->render_template(loopy => [1,2,5]);
+
+	echo $graphite->render_template(loopy => ['a' .. 'e']);
 ?>
 <p>hello</p>
 	</body>

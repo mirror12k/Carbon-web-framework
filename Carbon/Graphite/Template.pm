@@ -20,8 +20,8 @@ sub code_ref { @_ > 1 ? $_[0]{graphite_template__code_ref} = $_[1] : $_[0]{graph
 
 
 sub execute {
-	my ($self, $arg) = @_;
-	return $self->code_ref->($arg)
+	my ($self, $graphite, $arg) = @_;
+	return $self->code_ref->($self, $graphite, $arg)
 }
 
 
