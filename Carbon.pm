@@ -60,8 +60,8 @@ Time::HiRes
 	# graphite runtime variable
 	# graphite template compilation
 # sql database plugin for anthracite
-# CGI runtime
 # FastCGI runtime?
+# MIME type -based content-type setting
 
 
 # awesome names to use:

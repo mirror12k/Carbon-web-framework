@@ -8,7 +8,7 @@ use feature 'say';
 use Carbon::Limestone::Client;
 
 
-# simple plugin that 
+# simple plugin that provides an interface to an existing Limestone database
 
 sub new {
 	my $class = shift;

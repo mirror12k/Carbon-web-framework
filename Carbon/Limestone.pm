@@ -20,6 +20,13 @@ use Carbon::Limestone::Database;
 	# add SSL support to Carbon and move limestone over to SSL
 	# add compression support to requests
 
+	# redo the request/response system using the already inplace thread pool
+		# extend the socket receive functionality
+	# purge Carbon::Limestone::Database, it's unneeded
+	# create a target architecture where the first name is the type, and the next is the name/namespace of it, e.g. 'Collection::TestApp::users'
+		# use this target as an index into a hash with all database items in it
+		# they must all implement execute_query and things like load and store
+
 
 our $CARBON_LIMESTONE_DEBUG_VALUE = 1 + $Carbon::CARBON_DEBUG_VALUE;
 
