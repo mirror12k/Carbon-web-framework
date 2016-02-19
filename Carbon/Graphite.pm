@@ -46,7 +46,6 @@ my \$output = '';
 			sub {
 				my ($self, $engine, $text) = @_;
 				$text =~ s/\A\$([a-zA-Z0-9_]+)\b//ms or die 'foreach requires variable name at start';
-				say "foreach invoked: $1";
 				my $name = $1;
 				if ($name eq '_') {
 					$name = '$arg';
@@ -102,7 +101,7 @@ sub compile_graphite_directive {
 sub compile_graphite {
 	my ($self, $text) = @_;
 
-	say "compiling graphite block: [[[$text]]]";
+	# say "compiling graphite block: [[[$text]]]";
 
 	my $parser = Carbon::Graphite::Parser->new($text);
 
@@ -111,7 +110,7 @@ sub compile_graphite {
 
 	while (my ($type, $text, $raw) = $parser->get_token) {
 		if ($type eq 'helper') {
-			say "got helper: $text";
+			# say "got helper: $text";
 			my $block = $parser->get_until_end_helper;
 			if (defined $self->helper($text)) {
 				$code .= $self->helper($text)->execute($self, $block);
@@ -163,10 +162,10 @@ sub compile_text {
 		/msx;
 	while ($text =~ /\G
 			(\$[a-zA-Z0-9_]+)|
-			\@([a-zA-Z0-9_]+)(?:->
+			\@([a-zA-Z0-9_]+)(?:->(?:
 				($value_regex)|
-				\[\s*((?:$value_regex(?:,\s*$value_regex)*\s*(?:,\s*)?)?)\]
-			)?|
+				\[\s*((?:$value_regex(?:\s*,\s*$value_regex)*\s*(?:,\s*)?)?)\]
+			))?|
 			(.*?((?=[\$\@])|\Z))
 			/msgx) {
 		my ($var, $inc, $inc_val, $inc_list, $html) = ($1, $2, $3, $4, $5);
@@ -175,6 +174,8 @@ sub compile_text {
 		} elsif (defined $inc) {
 			if (defined $inc_val) {
 				$code .= "\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_val($inc_val) .");\n";
+			} elsif (defined $inc_list) {
+				$code .= "\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_list($inc_list) .");\n";
 			} else {
 				$code .= "\$output .= \$graphite->render_template('$inc');\n";
 			}
@@ -209,27 +210,33 @@ sub compile_inc_val {
 	}
 }
 
+sub compile_inc_list {
+	my ($self, $text) = @_;
 
-sub helper_template_header {
-	my ($self) = @_;
+	my $code = '';
+	if ($text eq '') {
+		$code .= '[]';
+	} else {
+		$code .= '[';
+
+		my $value_regex = qr/
+			\$[a-zA-Z0-9_]+| # variable
+			\d+| # numeric value
+			'[^']*'| # string
+			"[^"]*" # string
+			/msx;
+		while ($text =~ /\G\s*($value_regex)\s*(,\s*)?/msg) {
+			my ($val, $cont) = ($1, $2);
+			$code .= $self->compile_inc_val($val) . ', ';
+			last unless defined $cont;
+		}
+
+		$code .= ']';
+	}
+
+	return $code
 }
 
-sub helper_foreach {
-	my ($self, $text) = @_;
-}
-
-sub helper_if {
-	my ($self, $text) = @_;
-}
-sub helper_elsif {
-	my ($self, $text) = @_;
-}
-sub helper_else {
-	my ($self, $text) = @_;
-}
-sub helper_with {
-	my ($self, $text) = @_;
-}
 
 
 1;

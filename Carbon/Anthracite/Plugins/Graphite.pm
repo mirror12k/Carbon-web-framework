@@ -41,7 +41,7 @@ sub get_template {
 
 sub set_template {
 	my ($self, $name, $template) = @_;
-	say "created template '$name'";
+	# say "created template '$name'";
 	$self->engine->template($name => $template);
 }
 

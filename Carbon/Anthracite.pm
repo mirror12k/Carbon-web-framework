@@ -80,7 +80,10 @@ sub compile {
 		# first let the plugins view the token
 		for my $plugin (@{$self->plugins}) {
 			my ($new_code, $new_token) = $plugin->compile_token([@token]);
-			$code .= $new_code; # append any code
+			if ($new_code ne '') {
+				$code .= $self->get_echo_code;
+				$code .= $new_code; # append any code
+			}
 			next TOKEN unless defined $new_token; # if it didn't return a token, we should stop propagating it
 			@token = @$new_token;
 		}
@@ -116,10 +119,7 @@ sub compile_token {
 	} elsif ($token_type eq 'directive') {
 		if ($tag_type eq 'perl') {
 			my $code = '';
-			if ($self->{carbon_anthracite__echo_accumulator} ne '') {
-				$code .= $self->code_wrap_text($self->{carbon_anthracite__echo_accumulator});
-				$self->{carbon_anthracite__echo_accumulator} = '';
-			}
+			$code .= $self->get_echo_code;
 			$code .= $tag_data;
 		} else {
 			die "unknown directive type: $tag_type";
@@ -144,20 +144,27 @@ local *echo = sub { $runtime->echo(@_) };
 sub code_tail {
 	my ($self) = @_;
 	my $code = '';
-	if ($self->{carbon_anthracite__echo_accumulator} ne '') {
-		$code .= $self->code_wrap_text($self->{carbon_anthracite__echo_accumulator});
-		$self->{carbon_anthracite__echo_accumulator} = '';
-	}
-	$code .= '}';
+	$code .= $self->get_echo_code;
+	$code .= "}\n";
 	return $code
 }
 
+
+sub get_echo_code {
+	my ($self) = @_;
+	my $code;
+	if ($self->{carbon_anthracite__echo_accumulator} ne '') {
+		$code = $self->code_wrap_text($self->{carbon_anthracite__echo_accumulator});
+		$self->{carbon_anthracite__echo_accumulator} = '';
+	}
+	return $code
+}
 
 sub code_wrap_text {
 	my ($self, $text) = @_;
 	$text =~ s/\\/\\\\/g;
 	$text =~ s/'/\\'/g;
-	return ";\necho('$text');\n"
+	return ";echo('$text');\n"
 }
 
 
