@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+	<body>
+<?graphite
+
+	#template yeti
+		<h1>hello world</h1>
+	/#
+
+	#template argy
+		<p>
+			<h1>$name</h1>
+			<li>job: $job</li>
+			<li>age: $age</li>
+			<li>price: $price</li>
+		</p>
+	/#
+
+	#template loopy
+		#foreach $_
+			<p>$_</p>
+		/#
+	/#
+
+?>
+
+<?perl
+	echo $graphite->render_template('yeti');
+	
+	echo $graphite->render_template(argy => { name => 'john', job => 'programmer', age => 35, price => 15000});
+
+	echo $graphite->render_template(loopy => [1,2,5]);
+?>
+<p>hello</p>
+	</body>
+</html>
