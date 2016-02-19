@@ -31,10 +31,27 @@
 	/#
 
 	#template multi_yeti
-		<p> my yetis </p>
-		@yeti
-		@yeti
-		@yeti
+		<div id='yetis'>
+			<p>my yetis:</p>
+			@yeti
+			@yeti
+			@yeti
+		</div>
+	/#
+
+	#template deep_hashes
+		<div class="where are we">
+		#with $subkey
+			<p>$magic</p>
+			<p>$more_magic</p>
+		/#
+		#with $otherkey
+			<p>$moar_magic</p>
+			#foreach $MOAR
+				<p>$_</p>
+			/#
+		/#
+		</div>
 	/#
 
 
@@ -59,6 +76,24 @@
 	echo $graphite->render_template(loopy => [1,2,5]);
 
 	echo $graphite->render_template(loopy => ['a' .. 'e']);
+	echo $graphite->render_template(deep_hashes => {
+		subkey => {
+			magic => 'THIS',
+			more_magic => 'IS',
+		},
+		otherkey => {
+			moar_magic => 'SPARTA',
+			MOAR => [
+				'A',
+				'A',
+				'A',
+				'A',
+				'A',
+				'A',
+				'A',
+			],
+		},
+	});
 ?>
 <p>hello</p>
 	</body>

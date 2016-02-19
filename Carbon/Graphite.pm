@@ -19,50 +19,9 @@ sub new {
 
 	$self->templates({});
 	$self->helpers({
-		template => Carbon::Graphite::Helper->new(
-			sub {
-				my ($self, $engine, $text) = @_;
-
-				$text =~ s/\A([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\s+?//ms or die 'template requires a text name at start';
-				my $name = $1;
-				$name =~ s#\\#\\\\#g;
-				$name =~ s#'#\\'#g;
-
-				my $code =
-"
-;\$graphite->set_template('$name' => Carbon::Graphite::Template->new( sub {
-my (\$self, \$graphite, \$arg) = \@_;
-my \$output = '';
-";
-				$code .= $engine->compile_graphite ($text);
-				$code .=
-'
-;return $output
-}));
-';
-				return $code
-			}
-		),
-		foreach => Carbon::Graphite::Helper->new(
-			sub {
-				my ($self, $engine, $text) = @_;
-				$text =~ s/\A\$([a-zA-Z0-9_]+)\b//ms or die 'foreach requires variable name at start';
-				my $name = $1;
-				if ($name eq '_') {
-					$name = '$arg';
-				} else {
-					$name = "\$arg->{$name}";
-				}
-				my $code =
-"
-;foreach my \$arg (\@{$name}) {
-";
-				$code .= $engine->compile_graphite ($text);
-				$code .= "}\n";
-
-				return $code
-			}
-		),
+		template => Carbon::Graphite::Helper->new(\&helper_template),
+		foreach => Carbon::Graphite::Helper->new(\&helper_foreach),
+		with => Carbon::Graphite::Helper->new(\&helper_with),
 	});
 
 	return $self
@@ -187,7 +146,7 @@ sub compile_text {
 			$html =~ s#\\#\\\\#g;
 			$html =~ s#'#\\'#g;
 			next if $html =~ /\A\s*\Z/m;
-			$code .= "\n\$output .= '$html';\n";
+			$code .= "\n;\$output .= '$html';\n";
 		}
 	}
 	return $code
@@ -241,6 +200,63 @@ sub compile_inc_list {
 }
 
 
+
+
+sub helper_template {
+	my ($helper, $engine, $text) = @_;
+
+	$text =~ s/\A([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\s+?//ms or die 'template requires a text name at start';
+	my $name = $1;
+	$name =~ s#\\#\\\\#g;
+	$name =~ s#'#\\'#g;
+
+	my $code =
+"
+;\$graphite->set_template('$name' => Carbon::Graphite::Template->new( sub {
+my (\$self, \$graphite, \$arg) = \@_;
+my \$output = '';
+";
+	$code .= $engine->compile_graphite ($text);
+	$code .=
+'
+;return $output
+}));
+';
+	return $code
+}
+
+
+sub helper_foreach {
+	my ($helper, $engine, $text) = @_;
+	$text =~ s/\A(\$[a-zA-Z0-9_]+)\b//ms or die 'foreach requires variable name at start';
+	my $name = $1;
+	$name = $engine->compile_inc_val($name);
+	my $code =
+"
+;foreach my \$arg (\@{$name}) {
+";
+	$code .= $engine->compile_graphite ($text);
+	$code .= "\n}\n";
+
+	return $code
+}
+
+
+sub helper_with {
+	my ($helper, $engine, $text) = @_;
+	$text =~ s/\A(\$[a-zA-Z0-9_]+)\b//ms or die 'with requires variable name at start';
+	my $name = $1;
+	$name = $engine->compile_inc_val($name);
+	my $code =
+"
+;do {
+my \$arg = $name;
+";
+	$code .= $engine->compile_graphite ($text);
+	$code .= "\n}\n";
+
+	return $code
+}
 
 1;
 
