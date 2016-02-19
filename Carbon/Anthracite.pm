@@ -131,7 +131,8 @@ sub compile_token {
 
 sub code_header {
 	my ($self, $data) = @_;
-	return 'sub {
+	return '
+sub {
 # this is necessary to prevent redefinition of symbols			
 package Carbon::Anthracite::Dynamic::'. ($data->filepath =~ s/[^a-zA-Z_]/_/gr) .';
 our ($runtime) = @_;
@@ -145,7 +146,7 @@ sub code_tail {
 	my ($self) = @_;
 	my $code = '';
 	$code .= $self->get_echo_code;
-	$code .= "}\n";
+	$code .= "\n}\n";
 	return $code
 }
 
@@ -164,7 +165,7 @@ sub code_wrap_text {
 	my ($self, $text) = @_;
 	$text =~ s/\\/\\\\/g;
 	$text =~ s/'/\\'/g;
-	return ";echo('$text');\n"
+	return "\n;echo('$text');\n"
 }
 
 

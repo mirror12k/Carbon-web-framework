@@ -36,7 +36,8 @@ my \$output = '';
 ";
 				$code .= $engine->compile_graphite ($text);
 				$code .=
-';return $output
+'
+;return $output
 }));
 ';
 				return $code
@@ -53,7 +54,8 @@ my \$output = '';
 					$name = "\$arg->{$name}";
 				}
 				my $code =
-";foreach my \$arg (\@{$name}) {
+"
+;foreach my \$arg (\@{$name}) {
 ";
 				$code .= $engine->compile_graphite ($text);
 				$code .= "}\n";
@@ -132,7 +134,7 @@ sub compile_graphite {
 
 sub code_header {
 	return '
-;do {
+;do { # graphite code block
 my $output = "";
 '
 }
@@ -140,7 +142,7 @@ my $output = "";
 sub code_tail {
 	return '
 ;echo $output;
-};
+}; # end of graphite code
 '
 }
 
@@ -170,21 +172,22 @@ sub compile_text {
 			/msgx) {
 		my ($var, $inc, $inc_val, $inc_list, $html) = ($1, $2, $3, $4, $5);
 		if (defined $var) {
-			$code .= "\$output .= ". $self->compile_inc_val($var) .";\n";
+			$code .= "\n;\$output .= ". $self->compile_inc_val($var) .";\n";
 		} elsif (defined $inc) {
 			if (defined $inc_val) {
-				$code .= "\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_val($inc_val) .");\n";
+				$code .= "\n;\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_val($inc_val) .");\n";
 			} elsif (defined $inc_list) {
-				$code .= "\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_list($inc_list) .");\n";
+				$code .= "\n;\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_list($inc_list) .");\n";
 			} else {
-				$code .= "\$output .= \$graphite->render_template('$inc');\n";
+				$code .= "\n;\$output .= \$graphite->render_template('$inc');\n";
 			}
 		} else {
 			$html =~ s/\A\s+/ /m;
 			$html =~ s/\s+\Z/ /m;
 			$html =~ s#\\#\\\\#g;
 			$html =~ s#'#\\'#g;
-			$code .= "\$output .= '$html';\n";
+			next if $html =~ /\A\s*\Z/m;
+			$code .= "\n\$output .= '$html';\n";
 		}
 	}
 	return $code
