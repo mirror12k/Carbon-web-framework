@@ -5,11 +5,11 @@
 
 	#template yeti
 		<h1>hello world</h1>
-	/#
+	#/
 
 	#template my_arg
 		<p> hello, my arg is <i>$_</i></p>
-	/#
+	#/
 
 	#template argy
 		<div>
@@ -20,15 +20,15 @@
 				<li>price: $price</li>
 			</ul>
 		</div>
-	/#
+	#/
 
 	#template loopy
 		<ul>
 		#foreach $_
 			<li>$_</li>
-		/#
+		#/
 		</ul>
-	/#
+	#/
 
 	#template multi_yeti
 		<div id='yetis'>
@@ -37,22 +37,22 @@
 			@yeti
 			@yeti
 		</div>
-	/#
+	#/
 
 	#template deep_hashes
 		<div class="where are we">
 		#with $subkey
 			<p>$magic</p>
 			<p>$more_magic</p>
-		/#
+		#/
 		#with $otherkey
 			<p>$moar_magic</p>
 			#foreach $MOAR
 				<p>$_</p>
-			/#
-		/#
+			#/
+		#/
 		</div>
-	/#
+	#/
 
 
 	@my_arg->'testval'

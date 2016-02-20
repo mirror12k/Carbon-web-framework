@@ -21,8 +21,15 @@ sub new {
 	$self->helpers({
 		template => Carbon::Graphite::Helper->new(\&helper_template),
 		foreach => Carbon::Graphite::Helper->new(\&helper_foreach),
+		if => Carbon::Graphite::Helper->new(\&helper_if),
+		elsif => Carbon::Graphite::Helper->new(\&helper_elsif),
+		else => Carbon::Graphite::Helper->new(\&helper_else),
 		with => Carbon::Graphite::Helper->new(\&helper_with),
+		namespace => Carbon::Graphite::Helper->new(\&helper_namespace),
 	});
+
+	$self->condition_else(0);
+	$self->namespace_stack([]);
 
 	return $self
 }
@@ -31,15 +38,42 @@ sub new {
 
 sub templates { @_ > 1 ? $_[0]{carbon_graphite__templates} = $_[1] : $_[0]{carbon_graphite__templates} }
 sub helpers { @_ > 1 ? $_[0]{carbon_graphite__helpers} = $_[1] : $_[0]{carbon_graphite__helpers} }
+sub condition_else { @_ > 1 ? $_[0]{carbon_graphite__condition_else} = $_[1] : $_[0]{carbon_graphite__condition_else} }
+sub namespace_stack { @_ > 1 ? $_[0]{carbon_graphite__namespace_stack} = $_[1] : $_[0]{carbon_graphite__namespace_stack} }
+
+sub current_namespace {
+	my ($self) = @_;
+	if (@{$self->namespace_stack}) {
+		return join '::', @{$self->namespace_stack}
+	} else {
+		return
+	}
+}
+
+sub push_namespace {
+	my ($self, $namespace) = @_;
+	push @{$self->namespace_stack}, $namespace;
+}
+sub pop_namespace {
+	my ($self) = @_;
+	pop @{$self->namespace_stack};
+}
 
 sub template {
 	my ($self, $name, $value) = @_;
+
+	my $namespace = $self->current_namespace;
+	$name = "${namespace}::$name" if defined $namespace;
+
+	# say "accessing template '$name'";
+
 	if (@_ > 2) {
 		return $self->templates->{$name} = $value;
 	} else {
 		return $self->templates->{$name}
 	}
 }
+
 sub helper {
 	my ($self, $name, $value) = @_;
 	if (@_ > 2) {
@@ -62,8 +96,6 @@ sub compile_graphite_directive {
 sub compile_graphite {
 	my ($self, $text) = @_;
 
-	# say "compiling graphite block: [[[$text]]]";
-
 	my $parser = Carbon::Graphite::Parser->new($text);
 
 	my @helper_stack;
@@ -71,12 +103,11 @@ sub compile_graphite {
 
 	while (my ($type, $text, $raw) = $parser->get_token) {
 		if ($type eq 'helper') {
-			# say "got helper: $text";
 			my $block = $parser->get_until_end_helper;
 			if (defined $self->helper($text)) {
 				$code .= $self->helper($text)->execute($self, $block);
 			} else {
-				# die "attempt to invoke unknown helper '$text'";
+				die "attempt to invoke unknown helper '$text'";
 			}
 		} elsif ($type eq 'end_helper') {
 			die "out of order end helper";
@@ -111,7 +142,9 @@ sub compile_text {
 	return '' if $text =~ /\A\s*\Z/m;
 
 	$text =~ s/\A\s+/ /m;
+	$text =~ s/\A\s+</</m;
 	$text =~ s/\s+\Z/ /m;
+	$text =~ s/>\s+\Z/>/m;
 
 	my $code = ";\n";
 
@@ -123,7 +156,7 @@ sub compile_text {
 		/msx;
 	while ($text =~ /\G
 			(\$[a-zA-Z0-9_]+)|
-			\@([a-zA-Z0-9_]+)(?:->(?:
+			\@([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)(?:->(?:
 				($value_regex)|
 				\[\s*((?:$value_regex(?:\s*,\s*$value_regex)*\s*(?:,\s*)?)?)\]
 			))?|
@@ -205,10 +238,8 @@ sub compile_inc_list {
 sub helper_template {
 	my ($helper, $engine, $text) = @_;
 
-	$text =~ s/\A([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\s+?//ms or die 'template requires a text name at start';
+	$text =~ s/\A([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\s+?//ms or die '"template" helper requires a text name at start';
 	my $name = $1;
-	$name =~ s#\\#\\\\#g;
-	$name =~ s#'#\\'#g;
 
 	my $code =
 "
@@ -228,7 +259,7 @@ my \$output = '';
 
 sub helper_foreach {
 	my ($helper, $engine, $text) = @_;
-	$text =~ s/\A(\$[a-zA-Z0-9_]+)\b//ms or die 'foreach requires variable name at start';
+	$text =~ s/\A(\$[a-zA-Z0-9_]+)\b//ms or die '"foreach" helper requires variable name at start';
 	my $name = $1;
 	$name = $engine->compile_inc_val($name);
 	my $code =
@@ -242,9 +273,70 @@ sub helper_foreach {
 }
 
 
+sub helper_if {
+	my ($helper, $engine, $text) = @_;
+	$text =~ s/\A\s*\(([^)]*)\)//ms or die '"if" helper requires a condition at start';
+	my $condition = $1;
+
+	$condition =~ s/(\$[a-zA-Z0-9_]+)\b/$engine->compile_inc_val($1)/e;
+	my $code =
+"
+;\$graphite->condition_else(1);
+if ($condition) {
+";
+
+	$code .= $engine->compile_graphite ($text);
+	$code .= 
+"
+;\$graphite->condition_else(0);
+}
+";
+
+	return $code
+}
+
+sub helper_elsif {
+	my ($helper, $engine, $text) = @_;
+	$text =~ s/\A\s*\(([^)]*)\)//ms or die '"elsif" helper requires a condition at start';
+	my $condition = $1;
+
+	$condition =~ s/(\$[a-zA-Z0-9_]+)\b/$engine->compile_inc_val($1)/e;
+	my $code =
+"
+;if (\$graphite->condition_else and ($condition)) {
+";
+
+	$code .= $engine->compile_graphite ($text);
+	$code .= 
+"
+;\$graphite->condition_else(0);
+}
+";
+
+	return $code
+}
+
+sub helper_else {
+	my ($helper, $engine, $text) = @_;
+
+	my $code =
+"
+;if (\$graphite->condition_else) {
+";
+
+	$code .= $engine->compile_graphite ($text);
+	$code .= 
+"
+}
+";
+
+	return $code
+}
+
+
 sub helper_with {
 	my ($helper, $engine, $text) = @_;
-	$text =~ s/\A(\$[a-zA-Z0-9_]+)\b//ms or die 'with requires variable name at start';
+	$text =~ s/\A(\$[a-zA-Z0-9_]+)\b//ms or die '"with" helper requires variable name at start';
 	my $name = $1;
 	$name = $engine->compile_inc_val($name);
 	my $code =
@@ -254,6 +346,24 @@ my \$arg = $name;
 ";
 	$code .= $engine->compile_graphite ($text);
 	$code .= "\n}\n";
+
+	return $code
+}
+
+
+sub helper_namespace {
+	my ($helper, $engine, $text) = @_;
+	$text =~ s/\A([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\b//ms or die '"namespace" helper requires namespace name at start';
+	my $name = $1;
+	my $code =
+"
+;\$graphite->push_namespace('$name');
+";
+	$code .= $engine->compile_graphite ($text);
+	$code .= 
+"
+;\$graphite->pop_namespace;
+";
 
 	return $code
 }

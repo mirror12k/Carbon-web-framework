@@ -120,7 +120,7 @@ sub compile_token {
 		if ($tag_type eq 'perl') {
 			my $code = '';
 			$code .= $self->get_echo_code;
-			$code .= $tag_data;
+			$code .= "$tag_data\n";
 		} else {
 			die "unknown directive type: $tag_type";
 		}
@@ -153,7 +153,7 @@ sub code_tail {
 
 sub get_echo_code {
 	my ($self) = @_;
-	my $code;
+	my $code = '';
 	if ($self->{carbon_anthracite__echo_accumulator} ne '') {
 		$code = $self->code_wrap_text($self->{carbon_anthracite__echo_accumulator});
 		$self->{carbon_anthracite__echo_accumulator} = '';

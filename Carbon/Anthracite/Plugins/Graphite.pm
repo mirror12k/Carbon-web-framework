@@ -47,15 +47,35 @@ sub set_template {
 
 sub render_template {
 	my ($self, $name, $arg) = @_;
+
+	my $template;
 	if (ref $name) { # if the second argument is a template object
-		return $name->execute($self, $arg)
+		$template = $name;
 	} else { # otherwise it's a name for retrieving a template
-		return $self->engine->template($name)->execute($self, $arg)
+		$template = $self->engine->template($name);
 	}
+	die "attempt to render missing template: '$name'" unless defined $template;
+	return $template->execute($self, $arg)
 }
 
 
 
+# low-level api methods
+
+sub push_namespace {
+	my ($self, $namespace) = @_;
+	$self->engine->push_namespace($namespace);
+}
+sub pop_namespace {
+	my ($self) = @_;
+	$self->engine->pop_namespace;
+}
+
+
+sub condition_else {
+	my ($self, $value) = @_;
+	return @_ > 1 ? $self->engine->condition_else($value) : $self->engine->condition_else
+}
 
 
 

@@ -131,7 +131,7 @@ graphite templating markup:
 		additional helpers can be defined programmatically
 		helpers can edit the environment, be sure to view the helper's documentation
 
-API:
+runtime API:
 	template objects:
 		each template is stored as Carbon::Graphite::Template objects within the Graphite engine
 		they are accessible with get_template of the graphite plugin:
@@ -172,7 +172,7 @@ API:
 		code can access template variables by using the '$arg' variable or dereferencing it as whatever is necessary:
 			$output .= sha256_hex $arg->{super_secret};
 
-	
+
 
 
 

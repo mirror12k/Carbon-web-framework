@@ -1,0 +1,28 @@
+<?graphite
+
+
+	#namespace generic
+		#template header
+			<!doctype html>
+			<html>
+			<head>
+				<title>$_</title>
+			</head>
+			<body>
+				<p>head of document</p>
+		#/
+
+		#template tail
+				<p>end of document</p>
+			</body>
+			</html>
+		#/
+	#/
+
+	#template my_work::example
+		<p>hello world</p>
+	#/
+
+	@generic::header->'namespace test'
+	@my_work::example
+	@generic::tail

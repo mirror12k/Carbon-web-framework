@@ -67,6 +67,7 @@ Time::HiRes
 # awesome names to use:
 
 # methane, oil, coal
+# charcoal
 # coalmine
 # carbide
 # carbon14

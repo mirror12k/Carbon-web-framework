@@ -38,8 +38,8 @@ sub get_token {
 	while ($self->{text} =~
 			m/\G
 				((\#([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\s+)|
-				(\/\#)|
-				(.+?)(?:(?=\/?\#)|\Z)) # match regular text
+				(\#\/)|
+				(.+?)(?:(?=\#)|\Z)) # match regular text
 			/smxg) {
 		my ($raw, $helper, $helper_name, $end_helper, $text) = ($1, $2, $3, $4, $5);
 		# say "debug:  $helper, $helper_name, $end_helper, $text";
@@ -62,18 +62,20 @@ sub get_token {
 sub get_until_end_helper {
 	my ($self) = @_;
 	my $text = '';
-	my $nesting = 0;
+	my $nesting = 1;
 	while (my ($type, undef, $raw) = $self->get_token) {
 		if ($type eq 'helper') {
 			$nesting++;
 		} elsif ($type eq 'end_helper') {
-			if ($nesting > 0) {
-				$nesting--;
-			} else {
+			$nesting--;
+			if ($nesting == 0) {
 				last
 			}
 		}
 		$text .= $raw;
+	}
+	if ($nesting > 0) {
+		die "unclosed helper invokation";
 	}
 	return $text
 }
