@@ -158,6 +158,7 @@ sub compile_text {
 
 	my $value_regex = qr/
 		\$[a-zA-Z0-9_]+| # variable
+		\@[a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*| # template
 		\d+| # numeric value
 		'[^']*'| # string
 		"[^"]*" # string
@@ -210,6 +211,8 @@ sub compile_inc_val {
 		} else {
 			return '$arg';
 		}
+	} elsif ($val =~ /\A\@([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\Z/) {
+		return "\$graphite->get_template('$1')";
 	} elsif ($val =~ /\A\d+\Z/) {
 		return $val;
 	} elsif ($val =~ /\A'[^']*'\Z/) {
@@ -232,6 +235,7 @@ sub compile_inc_list {
 
 		my $value_regex = qr/
 			\$[a-zA-Z0-9_]+| # variable
+			\@[a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*| # template
 			\d+| # numeric value
 			'[^']*'| # string
 			"[^"]*" # string
@@ -259,6 +263,7 @@ sub compile_inc_hash {
 
 		my $value_regex = qr/
 			\$[a-zA-Z0-9_]+| # variable
+			\@[a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*| # template
 			\d+| # numeric value
 			'[^']*'| # string
 			"[^"]*" # string

@@ -71,31 +71,44 @@
 		</div>
 	#/
 
-	@my_arg->'testval'
-	@my_arg->'hello world'
-	@multi_yeti
 
-	<p> my loops: </p>
-	@loopy->[]
-	@loopy->['asdf']
-	@loopy->[5425, 47435,]
-	@loopy->['up','up','down','down',   'left'     ,  'right'   ,'left',    'right'   , 'start']
+	<div class="example basic template invocation">
+		@yeti
+		@multi_yeti
+		@my_arg->'testval'
+		@my_arg->'hello world'
+	</div>
 
+	<div class="example looping and passing arrays to templates">
+		<p> my loops: </p>
+		@loopy->[]
+		@loopy->['asdf']
+		@loopy->[5425, 47435,]
+		@loopy->['up','up','down','down',   'left'     ,  'right'   ,'left',    'right'   , 'start']
+	</div>
 
-	@hashy->{ name => 'john', lastname => 'smith', subtotal => 100, tax => 10, total => 110 }
-	@hashy->{ name => 'jane', lastname => 'doe', subtotal => 50, tax => 14, total => 57 }
+	<div class="example passing hashes to templates">
+		@hashy->{ name => 'john', lastname => 'smith', subtotal => 100, tax => 10, total => 110 }
+		@hashy->{ name => 'jane', lastname => 'doe', subtotal => 50, tax => 14, total => 57 }
+	</div>
+
+	<div class="example passing templates to templates">
+		@dynamic_includer->@yeti
+		@dynamic_includer->@my_arg
+	</div>
 
 ?>
 
+		<div class="example invoking templates from perl code">
 <?perl
 
-	# 
 	
+	# rendering various templates
 	echo $graphite->render_template(argy => { name => 'john', job => 'programmer', age => 35, price => 15000});
-
 	echo $graphite->render_template(loopy => [1,2,5]);
-
 	echo $graphite->render_template(loopy => ['a' .. 'e']);
+
+	# passing complex structures to templates
 	echo $graphite->render_template(deep_hashes => {
 		subkey => {
 			magic => 'THIS',
@@ -115,8 +128,10 @@
 		},
 	});
 
+	# passing templates to templates
 	echo $graphite->render_template(dynamic_includer => $graphite->get_template('my_arg'));
 
 ?>
+		</div>
 	</body>
 </html>
