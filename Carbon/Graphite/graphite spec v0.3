@@ -2,9 +2,21 @@
 Graphite v0.3 specification
 	lightly inspired by Meteor's SpaceBars
 
-graphite templating markup:
+	this document only specifies how Graphite code should be formatted, what the Graphite code should ultimately output, and how
+	the runtime api of Graphite should work in perl. details about how and into what the Graphite code should be compiled are left up to
+	the implementations.
 
-	graphite blocks are directive blocks that start with '<?graphite' and end with '?>' or the end of the file if no '?>' is found
+
+what is Graphite?
+	Graphite is a templating language engine with a plugin for Anthracite which compiles Graphite templating language into perl code
+	for use in Anthracite. Simple and straight forward to use.
+
+	dynamic files containing graphite code should be pre-compiled and your templates should all be pre-included to maximise 
+	performance. this way the overhead of using templates is simply the cost of executing raw perl code that has already been compiled
+
+Graphite templating language specification:
+
+	Graphite blocks are directive blocks that start with '<?graphite' and end with '?>' or the end of the file if no '?>' is found
 	these blocks may contain html tags inside but no directive tags
 
 	words starting with a '#' are instructions to use an existing helper and any data between it and the '#/' ending it are passed to the helper
@@ -50,6 +62,23 @@ graphite templating markup:
 				@my_list_creator->[$my_mod, 'limestone', 'graphite']
 				@complex_include->{arg1 => 'asdf', arg2 => $title, arg3 => $_}
 			#/
+		these values may be regular values or deeper hash or array references:
+			#template invokes_super_complex
+				@my_list_creator->[[1,2,3],[4,5,6],{ user => 'user', pass => 'ssap' }]
+				@complex_include->{
+					available => {
+						john => 'yes',
+						joe => 'yes',
+						johnson => 'no'
+					},
+					jobs => [
+						'order pizza',
+						'pay for pizza',
+						'eat pizza'
+					]
+				}
+			#/
+
 
 	variable template inclusion:
 		to include a template from a variable simply use '@$' instead of '@', then the variable name:
@@ -72,7 +101,7 @@ graphite templating markup:
 		any templates included outside of a template directive will be executed and their output will be sent to echo
 
 
-	graphite comments:
+	Graphite comments:
 		comment blocks can be written by starting and ending them with '###':
 			#template magic
 				###
@@ -82,7 +111,6 @@ graphite templating markup:
 				###
 				<h1>heading</h1>
 			#/
-
 
 	helper inclusion:
 
@@ -146,7 +174,7 @@ graphite templating markup:
 			@GraphiteBars::header
 		namespace declarations stack on one another, so declaring a namespace 'tools' inside of a namespace 'awesome' will
 		result in the namespace being 'awesome::tools'
-		note: the 'namespace' helper does not edit any text of the template declation or invokation, instead it sets the graphite engine's current namespace value
+		note: the 'namespace' helper does not edit any text of the template declation or invokation, instead it sets the Graphite engine's current namespace value
 
 		the 'warn' helper writes any output from its block to the $runtime->warn method which should spit it out to stderr
 			#if (not defined $_)
@@ -171,16 +199,16 @@ graphite templating markup:
 
 		if a template or document ever needs more logic than just a few ifs, the logic should go in a helper, or better yet, be placed in code somewhere else
 
-runtime API:
+runtime API specification:
 	template objects:
 		each template is stored as Carbon::Graphite::Template objects within the Graphite engine
-		they are accessible with get_template of the graphite plugin:
+		they are accessible with get_template of the Graphite plugin:
 			my $template = $graphite->get_template('template_name')
 
 		to set a template by name:
 			$graphite->set_template('template_name' => $template)
 
-		they can be individually rendered by calling render_template of the graphite plugin:
+		they can be individually rendered by calling render_template of the Graphite plugin:
 			echo $graphite->render_template('template_name')
 		either the name of a template, or a template object may be passed
 		an argument can be passed to act as the default variable in the template:
@@ -196,19 +224,24 @@ runtime API:
 				# helper code
 			}))
 		the subroutine passed to Carbon::Graphite::Helper will receive 3 arguments;
-		the helper object itself, the graphite engine, and the text inside the helper
+		the helper object itself, the Graphite engine, and the text inside the helper
 		the helper must return code (or at least an empty string) which will be appended in the location it was called
+			my $helper = Carbon::Graphite::Helper->new(sub {
+				my ($helper, $engine, $text) = @_;
+				...
+				return "warn 'hello world!';"
+			});
 		to send data to output, simply append to the '$output' variable inside the returned code:
-			$output .= 'my special text';
+			return "$output .= 'my special text';"
 		the helper may edit the text it received in order to parse parameters
-		the helper must not edit text inside of a helper call which is nested inside of it
+		the helper MUST not edit text inside of a helper call which is nested inside of it
 			#my_helper my_arg
 				this part can be edited
 				#with $var
 					this part must not be edited by the 'my_helper' helper function
 				#/
 			#/
-		it can then pass the text to '$engine->compile_graphite' in order to compile it as proper graphite code
+		it can then pass the text to '$engine->compile_graphite' in order to compile it as proper Graphite code
 		code can access template variables by using the '$arg' variable or dereferencing it as whatever is necessary:
 			$output .= sha256_hex $arg->{super_secret};
 
