@@ -156,7 +156,7 @@ sub compile_text {
 		/msx;
 	while ($text =~ /\G
 			(\$[a-zA-Z0-9_]+)|
-			\@([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)(?:->(?:
+			\@(\$[a-zA-Z0-9_]+|[a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)(?:->(?:
 				($value_regex)|
 				\[\s*((?:$value_regex(?:\s*,\s*$value_regex)*\s*(?:,\s*)?)?)\]
 			))?|
@@ -166,12 +166,17 @@ sub compile_text {
 		if (defined $var) {
 			$code .= "\n;\$output .= ". $self->compile_inc_val($var) .";\n";
 		} elsif (defined $inc) {
-			if (defined $inc_val) {
-				$code .= "\n;\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_val($inc_val) .");\n";
-			} elsif (defined $inc_list) {
-				$code .= "\n;\$output .= \$graphite->render_template('$inc' => ". $self->compile_inc_list($inc_list) .");\n";
+			if ($inc =~ /\A\$/) {
+				$inc = $self->compile_inc_val($inc);
 			} else {
-				$code .= "\n;\$output .= \$graphite->render_template('$inc');\n";
+				$inc = "'$inc'";
+			}
+			if (defined $inc_val) {
+				$code .= "\n;\$output .= \$graphite->render_template($inc => ". $self->compile_inc_val($inc_val) .");\n";
+			} elsif (defined $inc_list) {
+				$code .= "\n;\$output .= \$graphite->render_template($inc => ". $self->compile_inc_list($inc_list) .");\n";
+			} else {
+				$code .= "\n;\$output .= \$graphite->render_template($inc);\n";
 			}
 		} else {
 			$html =~ s/\A\s+/ /m;

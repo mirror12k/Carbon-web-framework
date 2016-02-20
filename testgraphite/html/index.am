@@ -54,6 +54,12 @@
 		</div>
 	#/
 
+	#template dynamic_includer
+		<div class="my dynamics">
+			@$_->'dynamic values!'
+		</div>
+	#/
+
 
 	@my_arg->'testval'
 	@my_arg->'hello world'
@@ -94,7 +100,9 @@
 			],
 		},
 	});
+
+	echo $graphite->render_template(dynamic_includer => $graphite->get_template('my_arg'));
+
 ?>
-<p>hello</p>
 	</body>
 </html>
