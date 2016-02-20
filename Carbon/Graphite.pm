@@ -41,6 +41,9 @@ sub helpers { @_ > 1 ? $_[0]{carbon_graphite__helpers} = $_[1] : $_[0]{carbon_gr
 sub condition_else { @_ > 1 ? $_[0]{carbon_graphite__condition_else} = $_[1] : $_[0]{carbon_graphite__condition_else} }
 sub namespace_stack { @_ > 1 ? $_[0]{carbon_graphite__namespace_stack} = $_[1] : $_[0]{carbon_graphite__namespace_stack} }
 
+
+# api functions
+
 sub current_namespace {
 	my ($self) = @_;
 	if (@{$self->namespace_stack}) {
@@ -82,6 +85,11 @@ sub helper {
 		return $self->helpers->{$name}
 	}
 }
+
+
+
+
+# graphite compilation methods
 
 sub compile_graphite_directive {
 	my ($self, $block) = @_;
@@ -158,11 +166,12 @@ sub compile_text {
 			(\$[a-zA-Z0-9_]+)|
 			\@(\$[a-zA-Z0-9_]+|[a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)(?:->(?:
 				($value_regex)|
-				\[\s*((?:$value_regex(?:\s*,\s*$value_regex)*\s*(?:,\s*)?)?)\]
+				\[\s*((?:$value_regex(?:\s*,\s*$value_regex)*\s*(?:,\s*)?)?)\]|
+				\{\s*((?:[a-zA-Z0-9_]+\s*=>\s*$value_regex(?:\s*,\s*[a-zA-Z0-9_]+\s*=>\s*$value_regex)*\s*(?:,\s*)?)?)\}
 			))?|
 			(.*?((?=[\$\@])|\Z))
 			/msgx) {
-		my ($var, $inc, $inc_val, $inc_list, $html) = ($1, $2, $3, $4, $5);
+		my ($var, $inc, $inc_val, $inc_list, $inc_hash, $html) = ($1, $2, $3, $4, $5, $6);
 		if (defined $var) {
 			$code .= "\n;\$output .= ". $self->compile_inc_val($var) .";\n";
 		} elsif (defined $inc) {
@@ -175,6 +184,8 @@ sub compile_text {
 				$code .= "\n;\$output .= \$graphite->render_template($inc => ". $self->compile_inc_val($inc_val) .");\n";
 			} elsif (defined $inc_list) {
 				$code .= "\n;\$output .= \$graphite->render_template($inc => ". $self->compile_inc_list($inc_list) .");\n";
+			} elsif (defined $inc_hash) {
+				$code .= "\n;\$output .= \$graphite->render_template($inc => ". $self->compile_inc_hash($inc_hash) .");\n";
 			} else {
 				$code .= "\n;\$output .= \$graphite->render_template($inc);\n";
 			}
@@ -237,8 +248,39 @@ sub compile_inc_list {
 	return $code
 }
 
+sub compile_inc_hash {
+	my ($self, $text) = @_;
+
+	my $code = '';
+	if ($text eq '') {
+		$code .= '{}';
+	} else {
+		$code .= '{';
+
+		my $value_regex = qr/
+			\$[a-zA-Z0-9_]+| # variable
+			\d+| # numeric value
+			'[^']*'| # string
+			"[^"]*" # string
+			/msx;
+			# [a-zA-Z0-9_]+\s*=>\s*$value_regex
+		while ($text =~ /\G\s*([a-zA-Z0-9_]+)\s*=>\s*($value_regex)\s*(,\s*)?/msg) {
+			my ($key, $val, $cont) = ($1, $2, $3);
+			$code .= "'$key' => " . $self->compile_inc_val($val) . ', ';
+			last unless defined $cont;
+		}
+
+		$code .= '}';
+	}
+	return $code
+}
 
 
+
+
+
+
+# graphite helper functions
 
 sub helper_template {
 	my ($helper, $engine, $text) = @_;

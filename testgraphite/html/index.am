@@ -61,6 +61,16 @@
 	#/
 
 
+	#template hashy
+		<div class="hashy">
+			<h4>hello $name!</h4>
+			<p>your last name is $lastname</p>
+			<p>your subtotal is $subtotal</p>
+			<p>your tax is $tax</p>
+			<p>your total is $total</p>
+		</div>
+	#/
+
 	@my_arg->'testval'
 	@my_arg->'hello world'
 	@multi_yeti
@@ -70,6 +80,10 @@
 	@loopy->['asdf']
 	@loopy->[5425, 47435,]
 	@loopy->['up','up','down','down',   'left'     ,  'right'   ,'left',    'right'   , 'start']
+
+
+	@hashy->{ name => 'john', lastname => 'smith', subtotal => 100, tax => 10, total => 110 }
+	@hashy->{ name => 'jane', lastname => 'doe', subtotal => 50, tax => 14, total => 57 }
 
 ?>
 
