@@ -17,12 +17,20 @@
 			</body>
 			</html>
 		#/
+
+		#namespace super
+			#template man
+				<p>this is a namespace within a namespace!</p>
+			#/
+		#/
 	#/
 
 	#template my_work::example
 		<p>hello world</p>
+		@generic::super::man
 	#/
 
 	@generic::header->'namespace test'
 	@my_work::example
 	@generic::tail
+

@@ -42,13 +42,13 @@
 	#template deep_hashes
 		<div class="where are we">
 		#with $subkey
-			<p>$magic</p>
-			<p>$more_magic</p>
+			<p class="magic">$magic</p>
+			<p class="more magic">$more_magic</p>
 		#/
 		#with $otherkey
-			<p>$moar_magic</p>
+			<p class="moar magic">$moar_magic</p>
 			#foreach $MOAR
-				<p>$_</p>
+				<p class="moar">$_</p>
 			#/
 		#/
 		</div>
@@ -97,6 +97,20 @@
 		@dynamic_includer->@my_arg
 	</div>
 
+	@deep_hashes->{
+		subkey => {
+			magic => 'hi',
+			more_magic => 'there,',
+		},
+		otherkey => {
+			moar_magic => 'im',
+			MOAR => [
+				'a',
+				'deep',
+				'hash!',
+			],
+		},
+	}
 ?>
 
 		<div class="example invoking templates from perl code">
