@@ -62,6 +62,11 @@ Time::HiRes
 # sql database plugin for anthracite
 # FastCGI runtime?
 # MIME type -based content-type setting
+# cookies and sessions
+# a security suite:
+	# password hashing
+	# natural csrf tokens
+	# session tokens
 
 
 # awesome names to use:

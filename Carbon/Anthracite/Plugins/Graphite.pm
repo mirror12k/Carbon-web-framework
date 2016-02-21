@@ -59,6 +59,17 @@ sub render_template {
 }
 
 
+sub get_helper {
+	my ($self, $name) = @_;
+	return $self->engine->helper($name)
+}
+
+sub set_helper {
+	my ($self, $name, $helper) = @_;
+	$self->engine->helper($name => $helper);
+}
+
+
 
 # low-level api methods
 
