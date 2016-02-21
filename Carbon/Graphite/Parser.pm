@@ -39,12 +39,15 @@ sub get_token {
 			m/\G
 				((\#([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\s+)|
 				(\#\/)|
+				(\#\#\#(.*?)(?:\#\#\#|\Z))|
 				(.+?)(?:(?=\#)|\Z)) # match regular text
 			/smxg) {
-		my ($raw, $helper, $helper_name, $end_helper, $text) = ($1, $2, $3, $4, $5);
+		my ($raw, $helper, $helper_name, $end_helper, $comment, $comment_text, $text) = ($1, $2, $3, $4, $5, $6, $7);
 		# say "debug:  $helper, $helper_name, $end_helper, $text";
 		if (defined $helper) {
 			return helper => $helper_name, $raw
+		} elsif (defined $comment) {
+			return comment => $comment_text, $raw
 		} elsif (defined $end_helper) {
 			return end_helper => undef, $raw
 		} else {

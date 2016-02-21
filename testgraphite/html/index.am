@@ -3,14 +3,25 @@
 	<body>
 <?graphite
 
+
+	###
+		welcome to the basic test file which displays a few simple examples of how to use graphite
+
+		this is a comment
+	###
+	
+
+	### a basic template ###
 	#template yeti
 		<h1>hello world</h1>
 	#/
 
+	### a template that takes an argument and puts it into text ###
 	#template my_arg
 		<p> hello, my arg is <i>$_</i></p>
 	#/
 
+	### a template that takes an hash ref argument and puts its fields into text ###
 	#template argy
 		<div>
 			<h1>$name</h1>
@@ -22,6 +33,7 @@
 		</div>
 	#/
 
+	### a template that takes an array ref and iterates over its values ###
 	#template loopy
 		<ul>
 		#foreach $_
@@ -30,6 +42,7 @@
 		</ul>
 	#/
 
+	### a template that includes other templates inside ###
 	#template multi_yeti
 		<div id='yetis'>
 			<p>my yetis:</p>
@@ -39,6 +52,7 @@
 		</div>
 	#/
 
+	### a template that uses with to get values of deep hashes and arrays ###
 	#template deep_hashes
 		<div class="where are we">
 		#with $subkey
@@ -54,6 +68,7 @@
 		</div>
 	#/
 
+	### a template that includes a template which was passed in as an argument ###
 	#template dynamic_includer
 		<div class="my dynamics">
 			@$_->'dynamic values!'
@@ -61,6 +76,7 @@
 	#/
 
 
+	### a basic template that writes data from a hash ref ###
 	#template hashy
 		<div class="hashy">
 			<h4>hello $name!</h4>
@@ -97,20 +113,22 @@
 		@dynamic_includer->@my_arg
 	</div>
 
-	@deep_hashes->{
-		subkey => {
-			magic => 'hi',
-			more_magic => 'there,',
-		},
-		otherkey => {
-			moar_magic => 'im',
-			MOAR => [
-				'a',
-				'deep',
-				'hash!',
-			],
-		},
-	}
+	<div class="example invoking a template with deep hash ref argument">
+		@deep_hashes->{
+			subkey => {
+				magic => 'hi',
+				more_magic => 'there,',
+			},
+			otherkey => {
+				moar_magic => 'im',
+				MOAR => [
+					'a',
+					'deep',
+					'hash!',
+				],
+			},
+		}
+	</div>
 ?>
 
 		<div class="example invoking templates from perl code">

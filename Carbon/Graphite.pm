@@ -119,6 +119,9 @@ sub compile_graphite {
 			}
 		} elsif ($type eq 'end_helper') {
 			die "out of order end helper";
+		} elsif ($type eq 'comment') {
+			# do nothing for comments
+			# perhaps if a comment is followed by a template declaration, it should be marked as the documentation for said template?
 		} elsif ($type eq 'text') {
 			$code .= $self->compile_text($text);
 		} else {
@@ -150,7 +153,7 @@ my $graphite_template_regex = qr/\@$graphite_name_regex(?:::$graphite_name_regex
 my $graphite_value_regex = qr/
 		$graphite_variable_regex| # variable
 		$graphite_template_regex| # template
-		\d+| # numeric value
+		-?\d+(\.\d+)?| # numeric value
 		'[^']*'| # string
 		"[^"]*" # string
 		/msx;
@@ -176,15 +179,6 @@ sub compile_text {
 
 	my $code = ";\n";
 
-	# while ($text =~ /\G
-	# 		($graphite_variable_regex)|
-	# 		(\@$graphite_variable_regex|$graphite_template_regex)(?:->(
-	# 			$graphite_value_regex|
-	# 			\[\s*(?:$graphite_value_regex(?:\s*,\s*$graphite_value_regex)*\s*(?:,\s*)?)?\]|
-	# 			\{\s*(?:$graphite_name_regex\s*=>\s*$graphite_value_regex(?:\s*,\s*$graphite_name_regex\s*=>\s*$graphite_value_regex)*\s*(?:,\s*)?)?\}
-	# 		))?|
-	# 		(.*?((?=[\$\@])|\Z))
-	# 		/msgx) {
 	while ($text =~ /\G
 			(?<variable>$graphite_variable_regex)|
 			(?<template>\@$graphite_variable_regex|$graphite_template_regex)(?:->(?<template_arg>$graphite_extended_value_regex))?|
@@ -201,8 +195,7 @@ sub compile_text {
 				$inc = "'$inc'";
 			}
 			if (defined $inc_val) {
-				my $inc_code;
-				$inc_code = $self->compile_inc_extended_val($inc_val);
+				my $inc_code = $self->compile_inc_extended_val($inc_val);
 				$code .= "\n;\$output .= \$graphite->render_template($inc => $inc_code);\n";
 			} else {
 				$code .= "\n;\$output .= \$graphite->render_template($inc);\n";
@@ -252,16 +245,16 @@ sub compile_inc_extended_val {
 		}
 	} elsif ($val =~ /\A($graphite_template_regex)\Z/) {
 		return "\$graphite->get_template('". substr($1, 1) ."')"
-	} elsif ($val =~ /\A\d+\Z/) {
+	} elsif ($val =~ /\A-?\d+(\.\d+)?\Z/) {
 		return $val
 	} elsif ($val =~ /\A'[^']*'\Z/) {
 		return $val
 	} elsif ($val =~ /\A"([^"]*)"\Z/) {
 		return "'$1'"
 	} elsif ($val =~ /\A\[/) {
-		return $self->compile_inc_list(substr $val, 1, -1)
+		return $self->compile_inc_list($val)
 	} elsif ($val =~ /\A\{/) {
-		return $self->compile_inc_hash(substr $val, 1, -1)
+		return $self->compile_inc_hash($val)
 	} else {
 		die "unknown value to compile: '$val'";
 	}
@@ -270,20 +263,17 @@ sub compile_inc_extended_val {
 sub compile_inc_list {
 	my ($self, $text) = @_;
 
-	my $code = '';
-	if ($text eq '') {
-		$code .= '[]';
-	} else {
-		$code .= '[';
+	$text =~ s/\A\[(.*)\]\Z/$1/ms or die "not an array: '$text'";
 
-		while ($text =~ /\G\s*(?<val>$graphite_extended_value_regex)\s*(?<cont>,\s*)?/msg) {
-			my ($val, $cont) = @+{qw/ val cont /};
-			$code .= $self->compile_inc_extended_val($val) . ', ';
-			last unless defined $cont;
-		}
+	my $code = '[';
 
-		$code .= ']';
+	while ($text =~ /\G\s*(?<val>$graphite_extended_value_regex)\s*(?<cont>,\s*)?/msg) {
+		my ($val, $cont) = @+{qw/ val cont /};
+		$code .= $self->compile_inc_extended_val($val) . ', ';
+		last unless defined $cont;
 	}
+
+	$code .= ']';
 
 	return $code
 }
@@ -291,20 +281,17 @@ sub compile_inc_list {
 sub compile_inc_hash {
 	my ($self, $text) = @_;
 
-	my $code = '';
-	if ($text eq '') {
-		$code .= '{}';
-	} else {
-		$code .= '{';
+	$text =~ s/\A\{(.*)\}\Z/$1/ms or die "not a hash: '$text'";
 
-		while ($text =~ /\G\s*(?<key>$graphite_name_regex)\s*=>\s*(?<val>$graphite_extended_value_regex)\s*(?<cont>,\s*)?/msg) {
-			my ($key, $val, $cont) = @+{qw/ key val cont /};
-			$code .= "'$key' => " . $self->compile_inc_extended_val($val) . ', ';
-			last unless defined $cont;
-		}
+	my $code = '{';
 
-		$code .= '}';
+	while ($text =~ /\G\s*(?<key>$graphite_name_regex)\s*=>\s*(?<val>$graphite_extended_value_regex)\s*(?<cont>,\s*)?/msg) {
+		my ($key, $val, $cont) = @+{qw/ key val cont /};
+		$code .= "'$key' => " . $self->compile_inc_extended_val($val) . ', ';
+		last unless defined $cont;
 	}
+
+	$code .= '}';
 	return $code
 }
 
