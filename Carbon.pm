@@ -46,6 +46,9 @@ IO::Select
 Thread::Pool
 Time::HiRes
 
+
+Carbon::SSL further requires IO::Socket::SSL
+
 =cut
 
 
@@ -147,16 +150,19 @@ sub die {
 get/set the debug level
 level 0 means no output
 level 1 produces output from the Carbon package and subclasses
+
 =cut
 sub debug { @_ > 1 ? $_[0]{debug} = $_[1] : $_[0]{debug} }
 
 =item server_running
 whether the server is currently running
+
 =cut
 sub server_running { @_ > 1 ? $_[0]{carbon_server__running} = $_[1] : $_[0]{carbon_server__running} }
 
 =item port
 the port the server is (going to) run on
+
 =cut
 sub port { @_ > 1 ? $_[0]{carbon_server__port} = $_[1] : $_[0]{carbon_server__port} }
 sub server_socket { @_ > 1 ? $_[0]{carbon_server__server_socket} = $_[1] : $_[0]{carbon_server__server_socket} }
@@ -169,11 +175,13 @@ sub thread_pool { @_ > 1 ? $_[0]{carbon_server__thread_pool} = $_[1] : $_[0]{car
 =item onerror
 the function called when a server attempts to die
 Carp::croak by default
+
 =cut
 sub onerror { @_ > 1 ? $_[0]{carbon_onerror} = $_[1] : $_[0]{carbon_onerror} }
 
 =item router
 the current router used to route http requests
+
 =cut
 sub router { @_ > 1 ? $_[0]{carbon_server__router} = $_[1] : $_[0]{carbon_server__router} }
 

@@ -7,6 +7,8 @@ use feature 'say';
 use JSON;
 use FreezeThaw qw/ freeze thaw /;
 use IO::Socket::INET;
+use IO::Socket::SSL;
+use Time::HiRes 'usleep';
 
 use Carbon::Request;
 use Carbon::Response;
@@ -22,6 +24,11 @@ sub new {
 	$self->packet_length_bytes(2);
 	$self->payload_format('FreezeThaw');
 
+	$self->is_closed(0);
+
+	$self->{read_buffer} = '';
+	$self->{read_expected_size} = undef;
+
 	return $self
 }
 
@@ -31,6 +38,7 @@ sub payload_format { @_ > 1 ? $_[0]{limestone_connection__payload_format} = $_[1
 sub username { @_ > 1 ? $_[0]{limestone_connection__username} = $_[1] : $_[0]{limestone_connection__username} }
 
 sub socket { @_ > 1 ? $_[0]{limestone_connection__socket} = $_[1] : $_[0]{limestone_connection__socket} }
+sub is_closed { @_ > 1 ? $_[0]{limestone_connection__is_closed} = $_[1] : $_[0]{limestone_connection__is_closed} }
 
 sub set_settings {
 	my ($self, $settings) = @_;
@@ -68,9 +76,10 @@ sub serialize_settings {
 
 sub connect_client {
 	my ($self, $hostport) = @_;
-	my $sock = $self->socket(IO::Socket::INET->new(
+	my $sock = $self->socket(IO::Socket::SSL->new(
 		PeerAddr => $hostport,
-	) or return "connection failed: $!");
+		SSL_verify_mode => SSL_VERIFY_NONE,
+	) or return "connection failed: $!, $SSL_ERROR");
 
 	my $req = Carbon::Request->new;
 	$req->method('GET');
@@ -81,7 +90,7 @@ sub connect_client {
 	$req->header('content-length' => length $req->content);
 	$req->header('content-type' => 'application/json');
 
-	$sock->send($req->as_string);
+	$sock->print($req->as_string);
 
 	my $data = '';
 	while (<$sock>) {
@@ -89,7 +98,7 @@ sub connect_client {
 		s/\r?\n//;
 		last if $_ eq '';
 	}
-
+	# say "res: $data";
 	my $res = Carbon::Response->parse($data);
 
 	if ($res->code eq '101' and
@@ -103,6 +112,8 @@ sub connect_client {
 		$res->content($body);
 		$self->set_settings(decode_json $res->content);
 
+		$sock->blocking(0);
+
 		return
 	} else {
 		return 'server didnt accept the connection'
@@ -111,32 +122,59 @@ sub connect_client {
 }
 
 
+sub read_to_buffer {
+	my ($self) = @_;
+
+	my $read = 1;
+	my $total = 0;
+	while (defined $read and $read > 0) {
+		$read = $self->socket->read($self->{read_buffer}, 4096 * 16, length $self->{read_buffer});
+		$total += $read if defined $read;
+		# say "debug read loop: $read";
+	}
+	# say "read $total bytes";
+	$self->is_closed(1) if $total == 0;
+}
+
 sub read_packet {
 	my ($self) = @_;
 
-	my $length;
+	$self->read_to_buffer;
 
-	my $read = $self->socket->read($length, $self->packet_length_bytes);
-	return unless defined $read and $read == $self->packet_length_bytes;
-	if ($self->packet_length_bytes == 2) {
-		$length = unpack 'n', $length;
-	} elsif ($self->packet_length_bytes == 4) {
-		$length = unpack 'N', $length;
-	} else {
-		die "invalid packet_length_bytes setting: " . $self->packet_length_bytes;
+	unless (defined $self->{read_expected_size}) {
+		if ($self->packet_length_bytes <= length $self->{read_buffer}) {
+			my $length = substr $self->{read_buffer}, 0, $self->packet_length_bytes;
+			$self->{read_buffer} = substr $self->{read_buffer}, $self->packet_length_bytes;
+
+			if ($self->packet_length_bytes == 2) {
+				$length = unpack 'n', $length;
+			} elsif ($self->packet_length_bytes == 4) {
+				$length = unpack 'N', $length;
+			} else {
+				die "invalid packet_length_bytes setting: " . $self->packet_length_bytes;
+			}
+
+			$self->{read_expected_size} = $length;
+		}
 	}
 
+	if (defined $self->{read_expected_size}) {
+		if ($self->{read_expected_size} <= length $self->{read_buffer}) {
+			my $data = substr $self->{read_buffer}, 0, $self->{read_expected_size};
+			$self->{read_buffer} = substr $self->{read_buffer}, $self->{read_expected_size};
 
-	$read = $self->socket->read(my $data, $length);
-	return unless defined $read and $read == $length;
-	if ($self->payload_format eq 'FreezeThaw') {
-		# say "debug $data";
-		($data) = thaw $data;
-	} else {
-		die "invalid payload_format setting: " . $self->payload_format;
+			if ($self->payload_format eq 'FreezeThaw') {
+				($data) = thaw $data;
+			} else {
+				die "invalid payload_format setting: " . $self->payload_format;
+			}
+
+			$self->{read_expected_size} = undef;
+			return $data
+		}
 	}
 
-	return $data
+	return
 }
 
 sub write_packet {
@@ -159,7 +197,7 @@ sub write_packet {
 	} else {
 		die "invalid packet_length_bytes setting: " . $self->packet_length_bytes;
 	}
-	$self->socket->send($length . $data);
+	$self->socket->print($length . $data);
 }
 
 
@@ -195,6 +233,15 @@ sub read_result {
 	$data = Carbon::Limestone::Result->new(%$data);
 
 	return $data
+}
+
+sub read_result_blocking {
+	my ($self) = @_;
+
+	my $res;
+	usleep (1000 * 50) until $res = $self->read_result($res);
+
+	return $res
 }
 
 1;
