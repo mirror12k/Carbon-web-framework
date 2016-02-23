@@ -1,0 +1,50 @@
+
+
+
+limestone database structure
+
+
+a directory with the name of the database
+db.lock
+	- zero length file
+	- a database server locks this file on startup in order to make sure that it is the only program using this database
+manager.lsdb
+	- primary management file
+	- stores the database structure
+		- column names
+		- column values
+		- row count
+		- row key
+		- any indexes
+	- stores a list of most recent commits
+table.limestone
+	- raw table storage file
+
+
+manager file data should be loaded in memory
+
+any read/write operations should be compiled with information from the manager file before calling get_table or edit_table
+
+
+lock and reference count the table file
+	functions
+		get_table
+			- locks an access lock on the table
+			- atomically increments table reference count
+			- unlocks access lock
+			- performs necessary retrieval operation on table
+			- atomically decrements table reference count
+		edit_table
+			- locks access lock
+				# this prevents any new get_table instances from incrementing the reference count
+				# and prevents any other edit_table instances from editing the table in parallel
+			- waits until table reference count decrements to 0
+				# this ensures that no get_table instance is reading the table while we are waiting
+			- performs necessary edit operation on table
+				# now we are the only running thread with access to the table, we can perform edits free of interference
+			- unlocks access lock
+	reference counting can be implemented with a Thread::Semaphore
+		get_table can use down_force() to increment reference count and up() to decrement it
+		edit_table will use down() to block until all get_table calls have finished and called up()
+
+
