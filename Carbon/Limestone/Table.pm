@@ -9,6 +9,7 @@ use Data::Dumper;
 use IO::File;
 use threads::shared;
 use File::Path;
+use List::Util qw/ sum /;
 
 use Carbon::Limestone::Result;
 use Carbon::Limestone::Pack qw/ pack_value unpack_value /;
@@ -17,7 +18,24 @@ use Carbon::Limestone::Pack qw/ pack_value unpack_value /;
 
 
 sub columns { @_ > 1 ? $_[0]{limestone_table__columns} = $_[1] : $_[0]{limestone_table__columns} }
+sub table_entry_size { @_ > 1 ? $_[0]{limestone_table__table_entry_size} = $_[1] : $_[0]{limestone_table__table_entry_size} }
 
+
+
+sub set_entry_specs {
+	my ($self) = @_;
+	my $offset = 0;
+	
+	for my $col (@{$self->columns}) {
+		$col->{offset} = $offset;
+		$offset += $col->{length};
+	}
+	if ($offset % 8 != 0) {
+		$offset = 8 + $offset - ($offset % 8);
+	}
+
+	$self->table_entry_size($offset);
+}
 
 
 # database object api:
@@ -36,7 +54,15 @@ sub create {
 	my $self = $class->new($filepath);
 
 	$self->create_directory($filepath);
-	$self->columns(shared_clone($data->{columns}));
+	$self->columns(shared_clone([
+		map { {
+			name => $_,
+			type => $data->{columns}{$_},
+			length => get_type_length($data->{columns}{$_})
+		} }
+		keys %{$data->{columns}}
+	]));
+	$self->set_entry_specs;
 
 	# store the new config
 	my $file = IO::File->new($self->filepath . '/table_manager.db', 'w');
@@ -47,6 +73,7 @@ sub create {
 
 	say "created table: $filepath";
 	say "columns: ", Dumper $self->columns;
+	say "entry size: ", Dumper $self->table_entry_size;
 
 	return $self
 }
@@ -62,11 +89,13 @@ sub load {
 	my $length = unpack 'N', $data;
 	$file->read($data, $length);
 	$self->columns(shared_clone(unpack_value($data)));
+	$self->set_entry_specs;
 	$file->close;
 
 
 	say "loaded table: $filepath";
-	say "loaded columns: ", Dumper $self->columns;
+	say "columns: ", Dumper $self->columns;
+	say "entry size: ", Dumper $self->table_entry_size;
 
 	return $self
 }

@@ -68,11 +68,26 @@ say Dumper $con->read_result_blocking;
 $con->write_query(Carbon::Limestone::Query->new(type => 'query', target => 'Limestone::Table=test_table3'));
 say Dumper $con->read_result_blocking;
 
+
+$con->write_query(Carbon::Limestone::Query->new(
+	type => 'create',
+	target => 'Limestone::Table=test_table4',
+	data => {
+		columns => {
+			val1 => 'BOOL',
+			val2 => 'INT8',
+			val3 => 'UINT16',
+			val4 => 'INT32',
+			val5 => 'UINT64',
+		}
+	},
+));
+
 $con->write_query(Carbon::Limestone::Query->new(type => 'list', target => 'Limestone::Table=test*'));
 say Dumper $con->read_result_blocking;
 
-$con->write_query(Carbon::Limestone::Query->new(type => 'delete', target => 'Limestone::Table=test_table'));
-say Dumper $con->read_result_blocking;
+# $con->write_query(Carbon::Limestone::Query->new(type => 'delete', target => 'Limestone::Table=test_table4'));
+# say Dumper $con->read_result_blocking;
 
 $con->write_query(Carbon::Limestone::Query->new(type => 'list', target => '*'));
 say Dumper $con->read_result_blocking;
