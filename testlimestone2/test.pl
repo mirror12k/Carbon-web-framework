@@ -32,7 +32,16 @@ $con->write_query(Carbon::Limestone::Query->new(type => 'list', target => '*'));
 say Dumper $con->read_result_blocking;
 
 
-$con->write_query(Carbon::Limestone::Query->new(type => 'create', target => 'Limestone::Table=test_table'));
+$con->write_query(Carbon::Limestone::Query->new(
+	type => 'create',
+	target => 'Limestone::Table=test_table',
+	data => {
+		columns => {
+			test => 'UINT32',
+			key => 'CHAR_16',
+		}
+	},
+));
 say Dumper $con->read_result_blocking;
 
 
@@ -40,7 +49,17 @@ $con->write_query(Carbon::Limestone::Query->new(type => 'list', target => '*'));
 say Dumper $con->read_result_blocking;
 
 
-$con->write_query(Carbon::Limestone::Query->new(type => 'create', target => 'Limestone::Table=test_table2'));
+$con->write_query(Carbon::Limestone::Query->new(
+	type => 'create',
+	target => 'Limestone::Table=test_table2',
+	data => {
+		columns => {
+			val => 'UINT32',
+			name => 'STRING_255',
+			password => 'STRING_256',
+		}
+	},
+));
 say Dumper $con->read_result_blocking;
 
 $con->write_query(Carbon::Limestone::Query->new(type => 'query', target => 'Limestone::Table=test_table'));

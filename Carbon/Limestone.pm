@@ -208,7 +208,8 @@ sub serve_limestone_query {
 		$ret = $self->database->process_query($query);
 	};
 	if ($@) {
-		say "database query died: $@";
+		$self->warn ($DEBUG_VALUE, "worker thread died: $@");
+		$ret = Carbon::Limestone::Result->new(type => 'error', error => 'worker thread died: $@');
 	}
 
 	return $ret

@@ -50,3 +50,53 @@ lock and reference count the table file
 		edit_table will use down() to block until all get_table calls have finished and called up()
 
 
+
+the following types are supported
+	INT8
+	INT16
+	INT32
+	INT64
+	UINT8
+	UINT16
+	UINT32
+	UINT64
+	BOOL
+	CHAR_n
+	STRING_n
+
+	all INTs are standard integers with their bitsize written next to them
+	UINTs are unsigned integers similar to INTs
+	BOOL is a 1 byte boolean value (0 or 1)
+	CHAR_n, with n being a literal integer between 1 and 2**16 - 1, is a binary string of length n bytes
+		stored exactly as is in n bytes of memory
+	STRING_n, with n being a literal integer between 1 and 2**32 - 1, is a string of variable length, at most n length
+		it is stored as a 1/2/4 byte unsigned integer value specifying the length, following a buffer of n-size bytes which contains the string
+		the length value byte size is determined by the max length of the string:
+			max length < 2^8 = 1 byte length
+			2^8 <= max length < 2^16 = 2 byte length
+			otherwise, 4 byte length
+		essentially a mysql varchar
+
+memory layout of table file:
+	8 bytes - pointer to entries table
+	8 bytes - pointer to first entry memory space
+	8 bytes - null indicator end of header
+
+	entries table
+		8 bytes - length of entries table
+		8 bytes - number of entries currently in table
+		8 bytes [] - pointers to entries
+
+		- to resize entries table; the new table length is calculated, any entry slots in that memory space will be relocated and their pointers will be re-pointed
+
+	if entries are fixed size
+		- rest of file is populated by entry memory slots
+		- each slot has 1 byte at the start with data related to its status
+			- 1st LSB is a taken flag with 0 := not taken, 1 := taken
+		- rest of entry size and data is determined by column structure
+		- the whole structure is padded to 8 byte boundaries
+	
+	if entries are dynamic size
+		- TODO
+
+
