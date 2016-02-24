@@ -13,7 +13,6 @@ use IO::Select;
 
 use Carbon::Limestone::Connection;
 use Carbon::Limestone::Database;
-use Carbon::Limestone::Table;
 
 
 # todo:
@@ -223,6 +222,22 @@ sub open_database {
 
 	$self->database(Carbon::Limestone::Database->new(filepath => $filepath, debug => 1));
 }
+
+
+sub close_database {
+	my ($self) = @_;
+	$self->warn($DEBUG_VALUE, 'shutting down database');
+	$self->database->close_database;
+}
+
+
+# hook cleanup so that we can store all database objects before close
+sub cleanup {
+	my ($self) = @_;
+	$self->SUPER::cleanup;
+	$self->close_database;
+}
+
 
 
 

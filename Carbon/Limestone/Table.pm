@@ -6,6 +6,7 @@ use warnings;
 use feature 'say';
 
 use Carbon::Limestone::Result;
+use Data::Dumper;
 
 # a mock up of a database table
 
@@ -21,6 +22,23 @@ sub create {
 }
 
 
+sub load {
+	my ($class, $filepath) = @_;
+	my $self = $class->new($filepath);
+
+	say "loaded table: $filepath";
+
+	return $self
+}
+
+
+
+sub store {
+	my ($self) = @_;
+	
+	say "stored table: " . $self->filepath;
+}
+
 sub delete {
 	my ($self) = @_;
 	rmdir ($self->filepath);
@@ -35,7 +53,6 @@ sub query {
 	say "table ", $self->filepath, " got a query: ", Dumper $query;
 	return Carbon::Limestone::Result->new(type => 'success', data => 'working');
 }
-
 
 
 1;

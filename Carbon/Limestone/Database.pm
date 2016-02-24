@@ -11,6 +11,7 @@ use threads::shared;
 use Data::Dumper;
 
 use Carbon::Limestone::Result;
+use Carbon::Limestone::Table;
 
 
 sub new {
@@ -32,7 +33,7 @@ sub new {
 
 	$self->settings({});
 
-	if (not -e -d $self->filepath . '/limestone_settings.json') {
+	unless (-e -f $self->filepath . '/limestone_settings.json') {
 		$self->warn(1, 'database file not found, creating new database "'.$self->filepath.'"');
 		$self->create_database;
 	}
@@ -67,14 +68,17 @@ sub objects { @_ > 1 ? $_[0]{limestone_database__objects} = $_[1] : $_[0]{limest
 
 sub create_database {
 	my ($self) = @_;
-	# do nothing
 
+	# create basic databasebase settings	
 	$self->settings->{objects_types} = $self->object_types;
+	$self->settings->{objects} = [];
 
+	# write them to file, they will be read by open_database
 	my $file = IO::File->new($self->filepath . '/limestone_settings.json', 'w');
 	$file->print(encode_json $self->settings);
 	$file->close;
 
+	# create a path for objects
 	mkdir $self->filepath . '/objects/';
 }
 
@@ -82,7 +86,7 @@ sub create_database {
 sub open_database {
 	my ($self) = @_;
 
-	$self->warn(1, "opened database ". $self->filepath);
+	$self->warn(1, "opening database ". $self->filepath);
 
 	my $data = '';
 	my $file = IO::File->new($self->filepath . '/limestone_settings.json', 'r');
@@ -91,11 +95,36 @@ sub open_database {
 	$file->close;
 
 	$self->settings(decode_json $data);
+
+	$self->object_types ($self->settings->{objects_types});
+	$self->load_object($_) for @{$self->settings->{objects}};
+}
+
+
+sub close_database {
+	my ($self) = @_;
+
+	$self->warn(1, "closing database ". $self->filepath);
+
+	# store all database objects
+	$_->store for values %{$self->objects};
+
+	# store database settings
+	$self->settings->{objects_types} = $self->object_types;
+	$self->settings->{objects} = [ keys %{$self->objects} ];
+
+	my $file = IO::File->new($self->filepath . '/limestone_settings.json', 'w');
+	$file->print(encode_json $self->settings);
+	$file->close;
+
 }
 
 
 sub process_query {
 	my ($self, $query) = @_;
+
+	return Carbon::Limestone::Result->new(type => 'error', error => 'type field necessary') unless defined $query->type;
+
 	if ($query->type eq 'create') {
 		return Carbon::Limestone::Result->new(type => 'error', error => 'target field necessary') unless defined $query->target;
 
@@ -109,7 +138,7 @@ sub process_query {
 	} elsif ($query->type eq 'delete') {
 		return Carbon::Limestone::Result->new(type => 'error', error => 'target field necessary') unless defined $query->target;
 
-		my $status = $self->delete_object($query->target, $query->data);
+		my $status = $self->delete_object($query->target);
 		if ($status eq 'success') {
 			return Carbon::Limestone::Result->new(type => 'success');
 		} else {
@@ -149,8 +178,22 @@ sub create_object {
 	});
 }
 
+sub load_object {
+	my ($self, $path) = @_;
+
+	my ($objtype, $filepath) = split '=', $path, 2;
+	$filepath =~ s/::/\//g;
+	$filepath = $self->filepath . '/objects/' . $filepath;
+
+	return $self->lock_objects (sub {
+		my $obj = $self->object_types->{$objtype}->load($filepath);
+		$self->objects->{$path} = $obj if defined $obj;
+		return $obj
+	});
+}
+
 sub delete_object {
-	my ($self, $path, $data) = @_;
+	my ($self, $path) = @_;
 
 	# grab the object while quickly removing it from the objects list
 	my $object = $self->lock_objects (sub { delete $self->objects->{$path} });
@@ -169,7 +212,7 @@ sub list_objects {
 	my $regex = quotemeta $name;
 	$regex =~ s/\\\*/.*/gms;
 	my @objects = $self->lock_objects (sub { keys %{$self->objects} });
-	
+
 	return grep $_ =~ /\A$regex\Z/ms, @objects
 }
 
