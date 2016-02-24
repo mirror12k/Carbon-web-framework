@@ -5,10 +5,9 @@ use warnings;
 
 use feature 'say';
 
-
+use JSON;
 use IO::File;
 use threads::shared;
-use Thread::Synchronized;
 use Data::Dumper;
 
 use Carbon::Limestone::Result;
@@ -18,36 +17,30 @@ sub new {
 	my $class = shift;
 	my %args = @_;
 	my $self = bless {}, $class;
-	# using the synchronized method functionality requires that the object be shared
-	share($self); # this must be done first thing
 
 
 	$self->debug($args{debug} // 0);
 
-	$self->database_filepath($args{filepath} // die "database filepath required!");
-	# $self->version(int ($args{version} // 1));
+	$self->filepath($args{filepath} // die "database filepath required!");
+	$self->version(int ($args{version} // 1));
 
-	if (not -e $self->database_filepath) {
-		$self->warn(1, 'database file not found, creating new database "'.$self->database_filepath.'"');
-		$self->create_database_file;
+	$self->object_types($args{object_types} // {
+		%{$args{custom_object_types} // {}}, # merge the given object types with default types
+		'Limestone::Table' => 'Carbon::Limestone::Table',
+	});
+	$self->objects(shared_clone({}));
+
+	$self->settings({});
+
+	if (not -e -d $self->filepath . '/limestone_settings.json') {
+		$self->warn(1, 'database file not found, creating new database "'.$self->filepath.'"');
+		$self->create_database;
 	}
 	$self->open_database;
 
 
 	return $self
 }
-
-
-
-sub debug { @_ > 1 ? $_[0]{debug} = $_[1] : $_[0]{debug} }
-sub version { @_ > 1 ? $_[0]{limestone_database__version} = $_[1] : $_[0]{limestone_database__version} }
-sub database_filepath { @_ > 1 ? $_[0]{limestone_database__database_filepath} = $_[1] : $_[0]{limestone_database__database_filepath} }
-
-
-
-sub collections { @_ > 1 ? $_[0]{limestone_database__collections} = $_[1] : $_[0]{limestone_database__collections} }
-
-
 
 
 
@@ -59,65 +52,77 @@ sub warn {
 }
 
 
+sub debug { @_ > 1 ? $_[0]{debug} = $_[1] : $_[0]{debug} }
+sub version { @_ > 1 ? $_[0]{limestone_database__version} = $_[1] : $_[0]{limestone_database__version} }
+sub filepath { @_ > 1 ? $_[0]{limestone_database__filepath} = $_[1] : $_[0]{limestone_database__filepath} }
+sub settings { @_ > 1 ? $_[0]{limestone_database__settings} = $_[1] : $_[0]{limestone_database__settings} }
 
-sub create_database_file {
+
+
+sub object_types { @_ > 1 ? $_[0]{limestone_database__object_types} = $_[1] : $_[0]{limestone_database__object_types} }
+sub objects { @_ > 1 ? $_[0]{limestone_database__objects} = $_[1] : $_[0]{limestone_database__objects} }
+
+
+
+
+sub create_database {
 	my ($self) = @_;
 	# do nothing
+
+	$self->settings->{objects_types} = $self->object_types;
+
+	my $file = IO::File->new($self->filepath . '/limestone_settings.json', 'w');
+	$file->print(encode_json $self->settings);
+	$file->close;
+
+	mkdir $self->filepath . '/objects/';
 }
 
 
 sub open_database {
 	my ($self) = @_;
 
-	my %collections : shared;
-	$self->collections(\%collections);
+	$self->warn(1, "opened database ". $self->filepath);
 
-	$self->warn(1, "opened database file ". $self->database_filepath);
+	my $data = '';
+	my $file = IO::File->new($self->filepath . '/limestone_settings.json', 'r');
+	my $read = 1;
+	$read = $file->read($data, 16 * 4096, length $data) while defined $read and $read > 0;
+	$file->close;
+
+	$self->settings(decode_json $data);
 }
 
 
 sub process_query {
 	my ($self, $query) = @_;
-	if ($query->type eq 'init') {
-		return Carbon::Limestone::Result->new(type => 'error', error => 'collection field necessary') unless defined $query->collection;
+	if ($query->type eq 'create') {
+		return Carbon::Limestone::Result->new(type => 'error', error => 'target field necessary') unless defined $query->target;
 
-		if ($self->initialize_collection($query->collection)) {
+		my $status = $self->create_object($query->target, $query->data);
+		if ($status eq 'success') {
 			return Carbon::Limestone::Result->new(type => 'success');
 		} else {
-			return Carbon::Limestone::Result->new(type => 'error', error => 'collection already exists');
-		}
-
-	} elsif ($query->type eq 'list') {
-		return Carbon::Limestone::Result->new(type => 'success', data => [$self->list_collections]);
-
-	} elsif ($query->type eq 'append') {
-		return Carbon::Limestone::Result->new(type => 'error', error => 'collection field necessary') unless defined $query->collection;
-		return Carbon::Limestone::Result->new(type => 'error', error => 'data field necessary') unless defined $query->data;
-		my ($status, $data) = $self->append_collection_items($query->collection => $query->data);
-		if ($status eq 'success') {
-			return Carbon::Limestone::Result->new(type => 'success', data => $data);
-		} else {
-			return Carbon::Limestone::Result->new(type => 'error', error => $data);
+			return Carbon::Limestone::Result->new(type => 'error', error => $status);
 		}
 
 	} elsif ($query->type eq 'delete') {
-		return Carbon::Limestone::Result->new(type => 'error', error => 'collection field necessary') unless defined $query->collection;
-		return Carbon::Limestone::Result->new(type => 'error', error => 'where clause necessary') unless defined $query->data and exists $query->data->{where};
-		my ($status, $data) = $self->delete_collection_items($query->collection => $query->data);
+		return Carbon::Limestone::Result->new(type => 'error', error => 'target field necessary') unless defined $query->target;
+
+		my $status = $self->delete_object($query->target, $query->data);
 		if ($status eq 'success') {
-			return Carbon::Limestone::Result->new(type => 'success', data => $data);
+			return Carbon::Limestone::Result->new(type => 'success');
 		} else {
-			return Carbon::Limestone::Result->new(type => 'error', error => $data);
+			return Carbon::Limestone::Result->new(type => 'error', error => $status);
 		}
 
+	} elsif ($query->type eq 'list') {
+		return Carbon::Limestone::Result->new(type => 'error', error => 'target field necessary') unless defined $query->target;
+		return Carbon::Limestone::Result->new(type => 'success', data => [$self->list_objects($query->target)]);
+
 	} elsif ($query->type eq 'query') {
-		return Carbon::Limestone::Result->new(type => 'error', error => 'collection field necessary') unless defined $query->collection;
-		my ($status, $data) = $self->query_collection($query->collection => $query->data);
-		if ($status eq 'success') {
-			return Carbon::Limestone::Result->new(type => 'success', data => $data);
-		} else {
-			return Carbon::Limestone::Result->new(type => 'error', error => $data);
-		}
+		return Carbon::Limestone::Result->new(type => 'error', error => 'target field necessary') unless defined $query->target;
+		return $self->query_object($query);
 
 	} else {
 		$self->warn(1, 'invalid query type sent by peer: "' . $query->type . '"');
@@ -125,181 +130,68 @@ sub process_query {
 	}
 }
 
+sub create_object {
+	my ($self, $path, $data) = @_;
 
+	my ($objtype, $filepath) = split '=', $path, 2;
+	$filepath =~ s/::/\//g;
+	$filepath = $self->filepath . '/objects/' . $filepath;
 
-
-sub append_collection_items {
-	my ($self, $key, $items) = @_;
-	return $self->refractor_collection($key => sub {
-		my ($self, $collection) = @_;
-		# $self->warn(1, 'i got the refractor_lock!');
-		my $new_collection = {
-			refractor_lock => $collection->{refractor_lock},
-			data => [@{$collection->{data}}, @$items],
-		};
-		# sleep 5;
-		$new_collection = shared_clone($new_collection);
-		$self->get_set_collection($key => $new_collection);
-		# $self->warn(1, 'releasing the refractor_lock!');
-		return success => scalar @{$new_collection->{data}}
+	return $self->lock_objects (sub {
+		return 'object already exists' if exists $self->objects->{$path};
+		my $obj = $self->object_types->{$objtype}->create($filepath, $data);
+		if (defined $obj) {
+			$self->objects->{$path} = $obj;
+			return 'success'
+		} else {
+			return 'failed to create object';
+		}
 	});
 }
 
-sub delete_collection_items {
-	my ($self, $key, $query) = @_;
-	my $filters = $self->compile_where_filter($query->{where});
-	return error => $filters unless ref $filters;
+sub delete_object {
+	my ($self, $path, $data) = @_;
 
-	return $self->refractor_collection($key => sub {
-		my ($self, $collection) = @_;
+	# grab the object while quickly removing it from the objects list
+	my $object = $self->lock_objects (sub { delete $self->objects->{$path} });
 
-		# get data
-		my @data = @{$collection->{data}};
-		my $deleted_count = @data;
-
-		# filter it
-		foreach my $filter (@$filters) {
-			@data = grep $filter->($_), @data;
-		}
-		$deleted_count -= @data;
-
-		# recreate the collection
-		my $new_collection = {
-			refractor_lock => $collection->{refractor_lock},
-			data => [@data],
-		};
-
-		# put it back
-		$new_collection = shared_clone($new_collection);
-		$self->get_set_collection($key => $new_collection);
-
-		# return the number of deleted items
-		return success => $deleted_count
-	});
-}
-
-
-# verified that refractor_lock works just fine
-# FINALLY a solution to this mess
-sub refractor_collection {
-	my ($self, $key, $refraction) = @_;
-
-	my $collection = $self->get_set_collection($key);
-	return error => 'collection doesnt exist' unless defined $collection;
-
-	# say "debug: collection: $collection, ", is_shared($collection);
-	my $refractor_lock = $collection->{refractor_lock};
-	# say "debug: refractor_lock: $refractor_lock, ", is_shared($refractor_lock);
-
-	lock ($refractor_lock);
-	# access it again because it could've been replaced by the time we got the lock
-	my $locked_collection = $self->get_set_collection($key);
-	return $refraction->($self, $locked_collection);
-}
-
-sub compile_where_filter {
-	my ($self, $where) = @_;
-
-	my @filters;
-	foreach my $field (keys %$where) {
-		unless ($where->{$field} =~ /\A([!=<>]=|[<>]|eq|ne)\s+(.*)\Z/) {
-			return "invalid where clause: '$where->{$field}'";
-		}
-		my ($op, $val) = ($1, $2);
-		if ($op eq '==') {
-			push @filters, sub { $_->{$field} == $val };
-		} elsif ($op eq '!=') {
-			push @filters, sub { $_->{$field} != $val };
-		} elsif ($op eq '<') {
-			push @filters, sub { $_->{$field} < $val };
-		} elsif ($op eq '<=') {
-			push @filters, sub { $_->{$field} <= $val };
-		} elsif ($op eq '>') {
-			push @filters, sub { $_->{$field} > $val };
-		} elsif ($op eq '>=') {
-			push @filters, sub { $_->{$field} >= $val };
-		} elsif ($op eq 'eq') {
-			push @filters, sub { $_->{$field} eq $val };
-		} elsif ($op eq 'ne') {
-			push @filters, sub { $_->{$field} ne $val };
-		}
-	}
-	return \@filters
-}
-
-sub query_collection {
-	my ($self, $key, $query) = @_;
-
-	my $collection = $self->get_set_collection($key);
-	my @results = @{$collection->{data}}; # get the intial document list
-
-	# perform any where queries on it
-	if (defined $query and exists $query->{where}) {
-		my $filters = $self->compile_where_filter($query->{where});
-		return error => $filters unless ref $filters; # if there was a compiling error, return it
-		foreach my $filter (@$filters) {
-			@results = grep $filter->($_), @results;
-		}
-	}
-	# perform any limit queries
-	if (defined $query and exists $query->{limit}) {
-		my $index = $query->{limit}{index};
-		my $count = $query->{limit}{count};
-		if (defined $index and defined $count) {
-			if ($index >= 0) {
-				@results = @results[ int($index) .. (int($index) + int($count) - 1) ];
-			} else {
-				@results = @results[ int($index) .. (int($index) + int($count) - 1) ];
-			}
-		} elsif (defined $index) {
-			if ($index >= 0) {
-				@results = @results[ int($index) .. $#results ];
-			} else {
-				@results = @results[ int($index) .. -1 ];
-			}
-		} elsif (defined $count) {
-			@results = @results[ 0 .. (int($count) - 1) ];
-		} else {
-			return error => 'invalid limit query';
-		}
-	}
-
-	# return results
-	return success => \@results
-}
-
-
-sub initialize_collection {
-	my ($self, $key) = @_;
-	my $collection = $self->get_set_collection($key);
-	unless (defined $collection) {
-		my $new_collection = { refractor_lock => {}, data => [] };
-		$new_collection = shared_clone($new_collection);
-		$self->get_set_collection($key, $new_collection);
-		$self->warn(1, "initialized collection $key");
-		return 1
-	}
-	return 0
-}
-
-sub list_collections {
-	my ($self) = @_;
-	return keys %{$self->collections};
-}
-
-
-sub get_set_collection : synchronized method {
-	my ($self, $key, $collection) = @_;
-	if (@_ > 2) {
-		if (defined $collection) {
-			return $self->collections->{$key} = $collection;
-		} else {
-			delete $self->collections->{$key};
-			return
-		}
+	if (defined $object) {
+		$object->delete;
+		return 'success'
 	} else {
-		return $self->collections->{$key};
+		return 'object does not exist';
 	}
+}
+
+sub list_objects {
+	my ($self, $name) = @_;
+
+	my $regex = quotemeta $name;
+	$regex =~ s/\\\*/.*/gms;
+	my @objects = $self->lock_objects (sub { keys %{$self->objects} });
+	
+	return grep $_ =~ /\A$regex\Z/ms, @objects
+}
+
+
+sub query_object {
+	my ($self, $query) = @_;
+	my $path = $query->target;
+
+	# lock to get the object to make sure no collisions with other operations occurs
+	my $object = $self->lock_objects (sub { $self->objects->{$path} });
+	return Carbon::Limestone::Result->new(type => 'error', error => 'object does not exist') unless defined $object;
+
+	# perform the query
+	return $object->query($query);
+}
+
+
+sub lock_objects {
+	my ($self, $fun) = @_;
+	my $objects = $self->objects;
+	lock($objects);
+	return $fun->();
 }
 
 

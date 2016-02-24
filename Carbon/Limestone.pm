@@ -12,8 +12,8 @@ use Data::Dumper;
 use IO::Select;
 
 use Carbon::Limestone::Connection;
-# use Carbon::Limestone::Database;
-
+use Carbon::Limestone::Database;
+use Carbon::Limestone::Table;
 
 
 # todo:
@@ -32,7 +32,7 @@ use Carbon::Limestone::Connection;
 		# they must all implement execute_query and things like load and store
 
 
-our $CARBON_LIMESTONE_DEBUG_VALUE = 1 + $Carbon::CARBON_DEBUG_VALUE;
+our $DEBUG_VALUE = 1 + $Carbon::CARBON_DEBUG_VALUE;
 
 # use Fcntl ':flock';
 # flock($file, LOCK_EX|LOCK_NB)
@@ -92,7 +92,7 @@ sub schedule_job {
 
 		my $data = decode_json $req->content;
 		# currently we ignore completely whatever the client sends,
-		# we should really analyze what it sends and set settings based on that
+		# TODO: we should really analyze what it sends and set settings based on that
 
 		my $connection = Carbon::Limestone::Connection->new;
 		$connection->version(1);
@@ -171,7 +171,7 @@ sub update_thread_pool {
 		my $sock = delete $self->socket_jobs->{$jobid};
 		$sock = $self->socket_data->{"$sock"}{socket};
 		my $res = $self->thread_pool->result($jobid);
-		$self->limestone_connections->{"$sock"}->write_result($res // Carbon::Limestone::Response->new( type => 'error', error => 'no result' ));
+		$self->limestone_connections->{"$sock"}->write_result($res // Carbon::Limestone::Result->new( type => 'error', error => 'no result' ));
 		say "writing result to $sock";
 	}
 }
@@ -204,59 +204,24 @@ sub serve_limestone_query {
 	my ($self, $query) = @_;
 	# debugging
 	say "serving query $query";
-	return Carbon::Limestone::Result->new(type => 'success', data => 'working');
+	my $ret;
+	eval {
+		$ret = $self->database->process_query($query);
+	};
+	if ($@) {
+		say "database query died: $@";
+	}
+
+	return $ret
+	# return Carbon::Limestone::Result->new(type => 'success', data => 'working');
 }
 
-
-# sub start_limestone_connection {
-# 	my ($self, $sock, $req) = @_;
-
-# 	$self->warn($CARBON_LIMESTONE_DEBUG_VALUE, "established limestone database connection: $sock");
-
-# 	my $data = decode_json $req->content;
-
-# 	my $connection = Carbon::Limestone::Connection->new;
-# 	$connection->version(1);
-# 	$connection->packet_length_bytes(2);
-# 	$connection->payload_format('FreezeThaw');
-# 	$connection->username('guest');
-# 	$sock->blocking(1);
-# 	$connection->socket($sock);
-
-# 	my $res = Carbon::Response->new('101');
-# 	$res->header(connection => 'upgrade');
-# 	$res->header(upgrade => 'limestone-database-connection');
-# 	$res->content(encode_json $connection->serialize_settings);
-# 	$res->header('content-length' => length $res->content);
-# 	$res->header('content-type' => 'application/json');
-
-# 	$sock->send($res->as_string);
-
-# 	$self->limestone_query_loop($connection);
-
-# 	$sock->blocking(0);
-
-# 	$self->warn($CARBON_LIMESTONE_DEBUG_VALUE, "limestone connection disconnected: $sock");
-
-# 	return 0
-# }
-
-# sub limestone_query_loop {
-# 	my ($self, $con) = @_;
-
-# 	while (my $query = $con->read_query) {
-# 		# say "i got a query: ", Dumper $query;
-# 		my $res = $self->database->process_query($query);
-# 		$con->write_result($res // Carbon::Limestone::Response->new( type => 'error', error => 'no result' ));
-# 	}
-
-# }
 
 
 sub open_database {
 	my ($self, $filepath) = @_;
 
-	# $self->database(Carbon::Limestone::Database->new(filepath => $filepath, debug => 1));
+	$self->database(Carbon::Limestone::Database->new(filepath => $filepath, debug => 1));
 }
 
 

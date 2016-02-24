@@ -1,0 +1,29 @@
+
+v0.1
+
+this document specifies the interface of Limestone database objects
+
+
+database objects are abstractions that allow a common interface to the Limestone server and client
+each database object must implement the following api:
+	$obj->create($filepath, $data)
+		creates a new database object, with the given directory as its private location for storing data
+		it is also given a $data object which refers to the data passed along with the creation request
+	$obj->load($filepath)
+		creates a new object with data from the already stored files in the given directory
+	$obj->query($query)
+		gives the Carbon::Limestone::Query to the object for parsing and processing, awaiting a return of a Carbon::Limestone::Result
+	$obj->store
+		tells the object to store all of its data on disk due to to server shutdown or similar
+	$obj->delete
+		tells the object to delete all of its data and itself
+
+the Carbon::Limestone::Database will handle the loading and storing of objects on startup/shutdown,
+as well as organizing the objects by unique names and creating and destroying objects when requested by queries
+
+each object should be completely shared to allow the database to access it in multi-threaded context
+
+it's the object's responsibility to securely synchronize any reads/writes when necessary
+	further it must keep track of it's access state, as a delete operation can be called before a query has completed
+
+

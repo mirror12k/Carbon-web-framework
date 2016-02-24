@@ -25,7 +25,7 @@ my $srv = Carbon::Limestone->new(
 	ssl_certificate => 'cert.pem',
 	ssl_key => 'key.pem',
 	port => 2049,
-	database_filepath => 'test.limedb',
+	database_filepath => 'mydb',
 );
 
 

@@ -78,7 +78,7 @@ sub connect_client {
 	my ($self, $hostport) = @_;
 	my $sock = $self->socket(IO::Socket::SSL->new(
 		PeerAddr => $hostport,
-		SSL_verify_mode => SSL_VERIFY_NONE,
+		SSL_verify_mode => SSL_VERIFY_NONE, # TODO: fix somehow
 	) or return "connection failed: $!, $SSL_ERROR");
 
 	my $req = Carbon::Request->new;

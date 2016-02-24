@@ -9,7 +9,23 @@ sub new {
 	my $class = shift;
 	my %args = @_;
 	my $self = $class->SUPER::new(%args);
+
+	$self->target($args{target}) if exists $args{target};
+
 	return $self
+}
+
+sub target { @_ > 1 ? $_[0]{limestone_query__target} = $_[1] : $_[0]{limestone_query__target} }
+
+
+
+sub serialize {
+	my ($self) = @_;
+
+	my $data = $self->SUPER::serialize;
+	$data->{target} = $self->target if defined $self->target;
+
+	return $data
 }
 
 
