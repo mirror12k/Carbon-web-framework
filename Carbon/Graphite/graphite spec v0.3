@@ -132,6 +132,7 @@ Graphite templating language specification:
 
 			#foreach $experiences
 				<li> previous experience: $_ </p>
+			#/
 
 		the 'if' helper evals a given expression in parenthesis and executes the inside block only if the expression returns something truthy
 			#if ($name eq 'john')
