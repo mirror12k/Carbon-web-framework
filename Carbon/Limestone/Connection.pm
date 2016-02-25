@@ -39,6 +39,7 @@ sub username { @_ > 1 ? $_[0]{limestone_connection__username} = $_[1] : $_[0]{li
 
 sub socket { @_ > 1 ? $_[0]{limestone_connection__socket} = $_[1] : $_[0]{limestone_connection__socket} }
 sub is_closed { @_ > 1 ? $_[0]{limestone_connection__is_closed} = $_[1] : $_[0]{limestone_connection__is_closed} }
+sub last_read { @_ > 1 ? $_[0]{limestone_connection__last_read} = $_[1] : $_[0]{limestone_connection__last_read} }
 
 sub set_settings {
 	my ($self, $settings) = @_;
@@ -132,14 +133,15 @@ sub read_to_buffer {
 		$total += $read if defined $read;
 		# say "debug read loop: $read";
 	}
+
 	# say "read $total bytes";
-	$self->is_closed(1) if $total == 0;
+	return $total
 }
 
 sub read_packet {
 	my ($self) = @_;
 
-	$self->read_to_buffer;
+	my $read = $self->read_to_buffer;
 
 	unless (defined $self->{read_expected_size}) {
 		if ($self->packet_length_bytes <= length $self->{read_buffer}) {
@@ -154,6 +156,7 @@ sub read_packet {
 				die "invalid packet_length_bytes setting: " . $self->packet_length_bytes;
 			}
 
+			# say "got length: $length";
 			$self->{read_expected_size} = $length;
 		}
 	}
@@ -173,6 +176,13 @@ sub read_packet {
 			return $data
 		}
 	}
+
+	$self->last_read($read);
+	# # if we haven't read a single byte nor have we produced a packet, we must be in closed state
+	# if ($read == 0) {
+	# 	say "read 0, closing socket";
+	# 	$self->is_closed(1);
+	# }
 
 	return
 }

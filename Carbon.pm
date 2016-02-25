@@ -423,7 +423,7 @@ sub cleanup {
 	$self->server_socket(undef);
 
 	for my $socket_data (values %{$self->socket_data}) {
-		$self->delete_socket($socket_data->{socket});
+		$self->delete_socket($socket_data->{socket}) if defined $socket_data->{socket};
 	}
 	$self->socket_data(undef);
 	$self->socket_jobs(undef);

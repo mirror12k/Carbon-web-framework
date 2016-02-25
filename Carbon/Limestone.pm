@@ -140,10 +140,16 @@ sub update_limestone_connections {
 
 	foreach my $sock ($self->limestone_selector->can_read(10 / 1000)) {
 		my $con = $self->limestone_connections->{"$sock"};
+
 		my $query = $con->read_query;
 		if (defined $query) {
 			$self->schedule_limestone_query($sock, $query);
-		} elsif ($con->is_closed) {
+			
+			while ($query = $con->read_query){
+				# say "reading from $sock"; # CON DEBUG
+				$self->schedule_limestone_query($sock, $query);
+			}
+		} elsif ($con->last_read == 0) {
 			$self->delete_connection($con);
 		}
 	}
@@ -167,11 +173,15 @@ sub update_thread_pool {
 	# check any thread pool jobs that have completed
 	foreach my $jobid ($self->thread_pool->results) {
 		say "job [$jobid] completed!"; # JOBS DEBUG
+		my $res = $self->thread_pool->result($jobid);
 		my $sock = delete $self->socket_jobs->{$jobid};
 		$sock = $self->socket_data->{"$sock"}{socket};
-		my $res = $self->thread_pool->result($jobid);
-		$self->limestone_connections->{"$sock"}->write_result($res // Carbon::Limestone::Result->new( type => 'error', error => 'no result' ));
-		say "writing result to $sock";
+		if (defined $sock) {
+			$self->limestone_connections->{"$sock"}->write_result(
+				$res // Carbon::Limestone::Result->new( type => 'error', error => 'database generated no result' ));
+			# say "writing result to $sock"; # CON DEBUG
+		}
+		#  else { say "socket closed before a write could be completed"; } # CON DEBUG
 	}
 }
 
@@ -181,7 +191,7 @@ sub update_thread_pool {
 sub schedule_limestone_query {
 	my ($self, $sock, $query) = @_;
 
-	say "got query: $query";
+	# say "got query: $query"; # CON DEBUG
 	my $jobid = $self->thread_pool->job(fileno $sock, $query);
 
 	$self->socket_jobs->{$jobid} = "$sock"; # record the jobid for when the job is completed
@@ -201,8 +211,8 @@ sub start_thread {
 
 sub serve_limestone_query {
 	my ($self, $query) = @_;
-	# debugging
-	say "serving query $query";
+	
+	# say "serving query $query"; # CON DEBUG
 	my $ret;
 	eval {
 		$ret = $self->database->process_query($query);

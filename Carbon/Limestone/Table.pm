@@ -10,6 +10,7 @@ use IO::File;
 use threads::shared;
 use File::Path;
 use List::Util qw/ sum /;
+use Thread::Semaphore;
 
 use Carbon::Limestone::Result;
 use Carbon::Limestone::Pack qw/ pack_value unpack_value /;
@@ -17,8 +18,20 @@ use Carbon::Limestone::Pack qw/ pack_value unpack_value /;
 
 
 
+sub new {
+	my $class = shift;
+	my $self = $class->SUPER::new(@_);
+	$self->table_reference_semaphore(Thread::Semaphore->new);
+	$self->table_access_lock(shared_clone({}));
+
+	return $self
+}
+
+
 sub columns { @_ > 1 ? $_[0]{limestone_table__columns} = $_[1] : $_[0]{limestone_table__columns} }
 sub table_entry_size { @_ > 1 ? $_[0]{limestone_table__table_entry_size} = $_[1] : $_[0]{limestone_table__table_entry_size} }
+sub table_reference_semaphore { @_ > 1 ? $_[0]{limestone_table__table_reference_semaphore} = $_[1] : $_[0]{limestone_table__table_reference_semaphore} }
+sub table_access_lock { @_ > 1 ? $_[0]{limestone_table__table_access_lock} = $_[1] : $_[0]{limestone_table__table_access_lock} }
 
 
 
@@ -52,6 +65,7 @@ sub create {
 	}
 	verify_columns($data->{columns});
 
+	# since we verified that the data is valid, we can start actually creating the table
 	my $self = $class->new($filepath);
 
 	$self->create_directory($filepath);
@@ -72,6 +86,7 @@ sub create {
 	$file->print($packed);
 	$file->close;
 
+	# varous values for table file
 	my $entry_count = 256;
 	my $entry_size = $self->table_entry_size;
 	my $header_size = 5 * 8;
@@ -149,14 +164,69 @@ sub delete {
 
 sub query {
 	my ($self, $query) = @_;
+	my $data = $query->data // return Carbon::Limestone::Result->new(type => 'error', error => 'data field required');
+	# say "table ", $self->filepath, " got a query: ", Dumper $query;
 
-	say "table ", $self->filepath, " got a query: ", Dumper $query;
+	if ($data->{type} eq 'insert') {
+		$self->edit_table(sub {
+			say "inserting stuff into a table";
+			sleep 3;
+			say "done inserting!";
+		});
+	} elsif ($data->{type} eq 'get') {
+		$self->access_table(sub {
+			say "getting values out of a table!";
+			sleep 3;
+			say "done getting!";
+		});
+	} else {
+		Carbon::Limestone::Result->new(type => 'error', error => "unknown table query type '$data->{type}'")
+	}
+
 	return Carbon::Limestone::Result->new(type => 'success', data => 'working');
 }
 
 
 
-# other methods
+# primary synchronization methods
+
+
+# any function passed to access_table is ensured that no changes will be made to the database file for the duration of its operation
+# however multiple table-accessing operations can happen in parallel, so the subroutine must not edit the file itself
+sub access_table {
+	my ($self, $fun) = @_;
+	$self->increment_table_reference_count;
+	$fun->();
+	$self->decrement_table_reference_count;
+}
+
+# any function passed to edit_table is ensured that no other subroutine is/can access or edit the table for the duration of its operation
+sub edit_table {
+	my ($self, $fun) = @_;
+
+	my $access_lock = $self->table_access_lock;
+	lock($access_lock);
+	$self->table_reference_semaphore->down;
+	$fun->();
+	$self->table_reference_semaphore->up;
+}
+
+# this is just to scope the lock
+sub increment_table_reference_count {
+	my ($self) = @_;
+	my $access_lock = $self->table_access_lock;
+	lock($access_lock);
+	$self->table_reference_semaphore->down_force;
+	# lock is freed at the end of this function	
+}
+
+sub decrement_table_reference_count {
+	my ($self) = @_;
+	$self->table_reference_semaphore->up;
+}
+
+
+# utility methods
 
 
 my %TABLE_VALUE_TYPES = (
