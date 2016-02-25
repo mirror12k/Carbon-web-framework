@@ -168,7 +168,11 @@ sub query {
 	# say "table ", $self->filepath, " got a query: ", Dumper $query;
 
 	if ($data->{type} eq 'insert') {
-		my $count = $self->edit_table(\&insert_entry, $data->{entries});
+		my $count = $self->edit_table(
+			\&insert_entry,
+			[ map $self->pack_entry($_), @{$data->{entries}} ], # pre-pack the entry so that we aren't doing it in locked context
+		);
+		# insert returns the current number of entries in the table
 		return Carbon::Limestone::Result->new(type => 'success', data => $count);
 	} elsif ($data->{type} eq 'get') {
 		$self->access_table(sub {
@@ -232,13 +236,16 @@ sub decrement_table_reference_count {
 use Fcntl;
 sub insert_entry {
 	my ($self, $entries) = @_;
+	# entries are already packed to prevent wasting cpu in locked context
 	
 	my @to_insert = @$entries;
 	my @inserted_addresses;
 
+	# open the table file
 	my $file = IO::File->new($self->filepath . '/table_0.ls_table', 'r+');
 	$file->read(my $buf, 8 * 2);
 	my ($table_offset, $first_entry_offset) = unpack 'Q<Q<', $buf;
+
 	# insert data into free entries
 	$file->seek($first_entry_offset, SEEK_SET);
 	while (@to_insert) {
@@ -249,11 +256,11 @@ sub insert_entry {
 		} else {
 			$file->seek(-1, SEEK_CUR);
 			push @inserted_addresses, $file->tell;
-			$file->print("\x01" . $self->pack_entry(shift @to_insert));
+			$file->print("\x01" . shift @to_insert);
 		}
 	}
 	
-	# write inserted addresses into table memory
+	# go the the entries table
 	$file->seek($table_offset, SEEK_SET);
 	$file->read($buf, 16);
 	my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
@@ -262,8 +269,8 @@ sub insert_entry {
 	$file->seek(-8, SEEK_CUR);
 	$file->print(pack 'Q<', $current_entries + @inserted_addresses);
 
-	# now write the addresses
 	$file->seek($current_entries * 8, SEEK_CUR); # seek to end of table
+	# now write the addresses into the entries table
 	for my $addr (@inserted_addresses) {
 		$file->print(pack 'Q<', $addr);
 	}
