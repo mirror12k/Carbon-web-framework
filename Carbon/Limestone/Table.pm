@@ -5,16 +5,17 @@ use warnings;
 
 use feature 'say';
 
-use Data::Dumper;
 use IO::File;
-use threads::shared;
 use File::Path;
+use Fcntl;
 use List::Util qw/ sum /;
+use threads::shared;
 use Thread::Semaphore;
 
 use Carbon::Limestone::Result;
 use Carbon::Limestone::Pack qw/ pack_value unpack_value /;
 
+use Data::Dumper;
 
 
 
@@ -169,17 +170,14 @@ sub query {
 
 	if ($data->{type} eq 'insert') {
 		my $count = $self->edit_table(
-			\&insert_entry,
+			\&insert_entries,
 			[ map $self->pack_entry($_), @{$data->{entries}} ], # pre-pack the entry so that we aren't doing it in locked context
 		);
 		# insert returns the current number of entries in the table
 		return Carbon::Limestone::Result->new(type => 'success', data => $count);
 	} elsif ($data->{type} eq 'get') {
-		$self->access_table(sub {
-			say "getting values out of a table!";
-			sleep 3;
-			say "done getting!";
-		});
+		my $entries = $self->access_table(\&get_entries, $data);
+		return Carbon::Limestone::Result->new(type => 'success', data => $entries);
 	} else {
 		Carbon::Limestone::Result->new(type => 'error', error => "unknown table query type '$data->{type}'")
 	}
@@ -233,8 +231,7 @@ sub decrement_table_reference_count {
 	$self->table_reference_semaphore->up;
 }
 
-use Fcntl;
-sub insert_entry {
+sub insert_entries {
 	my ($self, $entries) = @_;
 	# entries are already packed to prevent wasting cpu in locked context
 	
@@ -279,6 +276,94 @@ sub insert_entry {
 
 	return $current_entries + @inserted_addresses
 }
+
+# TODO: sanitize this
+sub compile_where_filter {
+	my ($self, $where) = @_;
+
+	my @code;
+	foreach my $field (keys %$where) {
+		unless ($where->{$field} =~ /\A([!=<>]=|[<>]|eq|ne)\s+(.*)\Z/) {
+			return "invalid where clause: '$where->{$field}'";
+		}
+		my ($op, $val) = ($1, $2);
+		if ($op eq '==') {
+			push @code, "\$entry->{$field} == $val";
+		} elsif ($op eq '!=') {
+			push @code, "\$entry->{$field} != $val";
+		} elsif ($op eq '<') {
+			push @code, "\$entry->{$field} < $val";
+		} elsif ($op eq '<=') {
+			push @code, "\$entry->{$field} <= $val";
+		} elsif ($op eq '>') {
+			push @code, "\$entry->{$field} > $val";
+		} elsif ($op eq '>=') {
+			push @code, "\$entry->{$field} >= $val";
+		} elsif ($op eq 'eq') {
+			push @code, "\$entry->{$field} eq $val";
+		} elsif ($op eq 'ne') {
+			push @code, "\$entry->{$field} ne $val";
+		}
+	}
+	my $code = join ' and ', @code;
+	$code = "sub { my \$entry = shift; $code }";
+	say "compiling where filter: $code";
+	return eval $code
+}
+
+sub get_entries {
+	my ($self, $query) = @_;
+
+	# some setup
+	my @results;
+	my $where_filter;
+	$where_filter = $self->compile_where_filter($query->{where}) if defined $query->{where};
+	my $entry_size = $self->table_entry_size;
+
+
+	# open the file and read the table pointer
+	my $file = IO::File->new($self->filepath . '/table_0.ls_table', 'r+');
+	$file->read(my $buf, 8);
+	my ($table_offset) = unpack 'Q<', $buf;
+
+	# go to the entries table
+	$file->seek($table_offset, SEEK_SET);
+	$file->read($buf, 16);
+	my (undef, $current_entries) = unpack 'Q<Q<', $buf;
+
+	my $current_offset = $table_offset + 16;
+	for (1 .. $current_entries) { # iterate entries table
+		# get the entry address
+		$file->read($buf, 8);
+		$current_offset += 8;
+		my $entry_addr = unpack 'Q<', $buf;
+
+		# read the entry and parse it
+		$file->seek($entry_addr, SEEK_SET);
+		$file->read($buf, $entry_size);
+		my $entry = $self->unpack_entry($buf);
+		# filter it if we have a filter, and add it to the results
+		unless (defined $where_filter and not $where_filter->($entry)) {
+			push @results, $entry;
+		}
+
+		# go back to entries table
+		$file->seek($current_offset, SEEK_SET);
+
+		# this can probably be optimized by reading multiple offsets at once and then jumping around to read them
+	}
+	$file->close;
+
+	return \@results
+}
+
+
+
+
+
+
+
+
 
 
 
@@ -363,7 +448,7 @@ sub pack_entry {
 		} elsif ($col->{type} eq 'INT8') {
 			$res .= pack 'c', $data->{$col->{name}} // 0;
 		} elsif ($col->{type} eq 'BOOL') {
-			$res .= pack 'C', $data->{$col->{name}} // 0;
+			$res .= pack 'C', 0x1 & ($data->{$col->{name}} // 0);
 		} elsif ($col->{type} =~ /\ACHAR_(\d+)\Z/) {
 			my $len = int $1;
 			my $s = $data->{$col->{name}} // '';
@@ -378,20 +463,67 @@ sub pack_entry {
 			if ($len < 2**8) {
 				$res .= pack 'C', length $s;
 			} elsif ($len < 2**16) {
-				$res .= pack 'S', length $s;
+				$res .= pack 'S<', length $s;
 			} else {
-				$res .= pack 'L', length $s;
+				$res .= pack 'L<', length $s;
 			}
 
 			$s .= "\0" x ($len - length $s);
 			$res .= $s;
 		} else {
-			die "unknown size to pack: $col->{type}";
+			die "unknown value to pack: $col->{type}";
 		}
 	}
 
 	my $padding = $self->table_entry_size - length($res) - 1;
 	$res .= pack "x$padding";
+
+	return $res
+}
+
+
+sub unpack_entry {
+	my ($self, $entry) = @_;
+
+	my $res = {};
+
+	for my $col (@{$self->columns}) {
+		if ($col->{type} eq 'UINT64') {
+			$res->{$col->{name}} = unpack 'Q<', substr $entry, $col->{offset}, 8;
+		} elsif ($col->{type} eq 'UINT32') {
+			$res->{$col->{name}} = unpack 'L<', substr $entry, $col->{offset}, 4;
+		} elsif ($col->{type} eq 'UINT16') {
+			$res->{$col->{name}} = unpack 'S<', substr $entry, $col->{offset}, 2;
+		} elsif ($col->{type} eq 'UINT8') {
+			$res->{$col->{name}} = unpack 'C', substr $entry, $col->{offset}, 1;
+		} elsif ($col->{type} eq 'INT64') {
+			$res->{$col->{name}} = unpack 'q<', substr $entry, $col->{offset}, 8;
+		} elsif ($col->{type} eq 'INT32') {
+			$res->{$col->{name}} = unpack 'l<', substr $entry, $col->{offset}, 4;
+		} elsif ($col->{type} eq 'INT16') {
+			$res->{$col->{name}} = unpack 's<', substr $entry, $col->{offset}, 2;
+		} elsif ($col->{type} eq 'INT8') {
+			$res->{$col->{name}} = unpack 'c', substr $entry, $col->{offset}, 1;
+		} elsif ($col->{type} eq 'BOOL') {
+			$res->{$col->{name}} = unpack 'C', substr $entry, $col->{offset}, 1;
+		} elsif ($col->{type} =~ /\ACHAR_(\d+)\Z/) {
+			$res->{$col->{name}} = substr $entry, $col->{offset}, 1;
+		} elsif ($col->{type} =~ /\ASTRING_(\d+)\Z/) {
+			my $len = int $1;
+			if ($len < 2**8) {
+				my $slen = unpack 'C', substr $entry, $col->{offset}, 1;
+				$res->{$col->{name}} = substr $entry, $col->{offset} + 1, $slen;
+			} elsif ($len < 2**16) {
+				my $slen = unpack 'S<', substr $entry, $col->{offset}, 2;
+				$res->{$col->{name}} = substr $entry, $col->{offset} + 2, $slen;
+			} else {
+				my $slen = unpack 'L<', substr $entry, $col->{offset}, 4;
+				$res->{$col->{name}} = substr $entry, $col->{offset} + 4, $slen;
+			}
+		} else {
+			die "unknown value to pack: $col->{type}";
+		}
+	}
 
 	return $res
 }
