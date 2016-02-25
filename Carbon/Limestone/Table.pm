@@ -168,11 +168,8 @@ sub query {
 	# say "table ", $self->filepath, " got a query: ", Dumper $query;
 
 	if ($data->{type} eq 'insert') {
-		$self->edit_table(sub {
-			say "inserting stuff into a table";
-			sleep 3;
-			say "done inserting!";
-		});
+		my $count = $self->edit_table(\&insert_entry, $data->{entries});
+		return Carbon::Limestone::Result->new(type => 'success', data => $count);
 	} elsif ($data->{type} eq 'get') {
 		$self->access_table(sub {
 			say "getting values out of a table!";
@@ -194,21 +191,28 @@ sub query {
 # any function passed to access_table is ensured that no changes will be made to the database file for the duration of its operation
 # however multiple table-accessing operations can happen in parallel, so the subroutine must not edit the file itself
 sub access_table {
-	my ($self, $fun) = @_;
+	my $self = shift;
+	my $fun = shift;
+
 	$self->increment_table_reference_count;
-	$fun->();
+	my @ret = $fun->($self, @_);
 	$self->decrement_table_reference_count;
+	return @ret if wantarray;
+	return $ret[0]
 }
 
 # any function passed to edit_table is ensured that no other subroutine is/can access or edit the table for the duration of its operation
 sub edit_table {
-	my ($self, $fun) = @_;
+	my $self = shift;
+	my $fun = shift;
 
 	my $access_lock = $self->table_access_lock;
 	lock($access_lock);
 	$self->table_reference_semaphore->down;
-	$fun->();
+	my @ret = $fun->($self, @_);
 	$self->table_reference_semaphore->up;
+	return @ret if wantarray;
+	return $ret[0]
 }
 
 # this is just to scope the lock
@@ -224,6 +228,51 @@ sub decrement_table_reference_count {
 	my ($self) = @_;
 	$self->table_reference_semaphore->up;
 }
+
+use Fcntl;
+sub insert_entry {
+	my ($self, $entries) = @_;
+	
+	my @to_insert = @$entries;
+	my @inserted_addresses;
+
+	my $file = IO::File->new($self->filepath . '/table_0.ls_table', 'r+');
+	$file->read(my $buf, 8 * 2);
+	my ($table_offset, $first_entry_offset) = unpack 'Q<Q<', $buf;
+	# insert data into free entries
+	$file->seek($first_entry_offset, SEEK_SET);
+	while (@to_insert) {
+		$file->read($buf, 1);
+		my $taken = 0x1 & ord $buf;
+		if ($taken) {
+			$file->seek($self->table_entry_size - 1, SEEK_CUR);
+		} else {
+			$file->seek(-1, SEEK_CUR);
+			push @inserted_addresses, $file->tell;
+			$file->print("\x01" . $self->pack_entry(shift @to_insert));
+		}
+	}
+	
+	# write inserted addresses into table memory
+	$file->seek($table_offset, SEEK_SET);
+	$file->read($buf, 16);
+	my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
+	say "debug table length: $table_length, entries: $current_entries";
+	# first write the new entries count
+	$file->seek(-8, SEEK_CUR);
+	$file->print(pack 'Q<', $current_entries + @inserted_addresses);
+
+	# now write the addresses
+	$file->seek($current_entries * 8, SEEK_CUR); # seek to end of table
+	for my $addr (@inserted_addresses) {
+		$file->print(pack 'Q<', $addr);
+	}
+
+	$file->close;
+
+	return $current_entries + @inserted_addresses
+}
+
 
 
 # utility methods
@@ -282,6 +331,63 @@ sub get_type_length {
 }
 
 
+# packs the column values as stored in the table
+# pads with nulls to full entry size - 1
+# does not pack the flags byte
+sub pack_entry {
+	my ($self, $data) = @_;
+
+	my $res = '';
+	for my $col (@{$self->columns}) {
+		if ($col->{type} eq 'UINT64') {
+			$res .= pack 'Q<', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} eq 'UINT32') {
+			$res .= pack 'L<', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} eq 'UINT16') {
+			$res .= pack 'S<', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} eq 'UINT8') {
+			$res .= pack 'C', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} eq 'INT64') {
+			$res .= pack 'q<', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} eq 'INT32') {
+			$res .= pack 'l<', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} eq 'INT16') {
+			$res .= pack 's<', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} eq 'INT8') {
+			$res .= pack 'c', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} eq 'BOOL') {
+			$res .= pack 'C', $data->{$col->{name}} // 0;
+		} elsif ($col->{type} =~ /\ACHAR_(\d+)\Z/) {
+			my $len = int $1;
+			my $s = $data->{$col->{name}} // '';
+			$s = substr $s, 0, $len if $len < length $s;
+			$s .= "\0" x ($len - length $s);
+			$res .= $s;
+		} elsif ($col->{type} =~ /\ASTRING_(\d+)\Z/) {
+			my $len = int $1;
+			my $s = $data->{$col->{name}} // '';
+			$s = substr $s, 0, $len if $len < length $s;
+
+			if ($len < 2**8) {
+				$res .= pack 'C', length $s;
+			} elsif ($len < 2**16) {
+				$res .= pack 'S', length $s;
+			} else {
+				$res .= pack 'L', length $s;
+			}
+
+			$s .= "\0" x ($len - length $s);
+			$res .= $s;
+		} else {
+			die "unknown size to pack: $col->{type}";
+		}
+	}
+
+	my $padding = $self->table_entry_size - length($res) - 1;
+	$res .= pack "x$padding";
+
+	return $res
+}
 
 
 
