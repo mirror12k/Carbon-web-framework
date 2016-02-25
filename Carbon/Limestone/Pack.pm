@@ -11,6 +11,10 @@ unpack_value_indexed
 /;
 
 
+# limestone pack/unpack functionality
+# very simple packing function which packs hashes, arrays, and strings (numbers are turned into strings)
+
+
 sub pack_value {
 	my ($value) = @_;
 	

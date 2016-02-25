@@ -24,8 +24,9 @@ sub table_entry_size { @_ > 1 ? $_[0]{limestone_table__table_entry_size} = $_[1]
 
 sub set_entry_specs {
 	my ($self) = @_;
-	my $offset = 0;
-	
+
+	my $offset = 1; # 1 byte for flags
+
 	for my $col (@{$self->columns}) {
 		$col->{offset} = $offset;
 		$offset += $col->{length};
@@ -71,9 +72,38 @@ sub create {
 	$file->print($packed);
 	$file->close;
 
+	my $entry_count = 256;
+	my $entry_size = $self->table_entry_size;
+	my $header_size = 5 * 8;
+
+	my $entry_table_offset = $header_size;
+	my $entry_table_size = 16 + 8 * $entry_count;
+
+	my $entries_offset = $entry_table_offset + $entry_table_size;
+	my $last_entry_offset = $entries_offset + ($entry_count - 1) * $entry_size;
+	my $first_free_entry_offset = $entries_offset;
+
+	# initialize table file
+	$file = IO::File->new($self->filepath . '/table_0.ls_table', 'w');
+	# entry table offset, first entry offset
+	$file->print(pack 'Q<', $entry_table_offset);
+	$file->print(pack 'Q<Q<Q<', $entries_offset, $last_entry_offset, $first_free_entry_offset);
+	# null header terminator
+	$file->print(pack 'Q<', 0);
+	# entry table array size, entries in table
+	$file->print(pack 'Q<Q<', $entry_count, 0);
+	# table entries (initally all null)
+	$file->print(pack 'Q<', 0) for 1 .. $entry_count;
+	# entries (all null)
+	$file->print(pack "x$entry_size") for 1 .. $entry_count;
+	$file->close;
+
+
 	say "created table: $filepath";
 	say "columns: ", Dumper $self->columns;
 	say "entry size: ", Dumper $self->table_entry_size;
+
+
 
 	return $self
 }
