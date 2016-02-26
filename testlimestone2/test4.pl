@@ -21,6 +21,14 @@ die $error if defined $error;
 
 
 $con->write_query(Carbon::Limestone::Query->new(
+	type => 'delete',
+	target => 'Limestone::Table=test_table',
+));
+say Dumper $con->read_result_blocking;
+
+
+
+$con->write_query(Carbon::Limestone::Query->new(
 	type => 'create',
 	target => 'Limestone::Table=test_table',
 	data => {
@@ -38,7 +46,6 @@ say Dumper $con->read_result_blocking;
 $con->write_query(Carbon::Limestone::Query->new(type => 'list', target => 'Limestone::Table=test_table'));
 say Dumper $con->read_result_blocking;
 
-say "sending three inserts:";
 $con->write_query(Carbon::Limestone::Query->new(
 	type => 'query', 
 	target => 'Limestone::Table=test_table',
@@ -76,16 +83,6 @@ $con->write_query(Carbon::Limestone::Query->new(
 say Dumper $con->read_result_blocking;
 
 
-
-$con->write_query(Carbon::Limestone::Query->new(
-	type => 'query', 
-	target => 'Limestone::Table=test_table',
-	data => {
-		type => 'get',
-	},
-));
-say Dumper $con->read_result_blocking;
-
 $con->write_query(Carbon::Limestone::Query->new(
 	type => 'query', 
 	target => 'Limestone::Table=test_table',
@@ -99,13 +96,14 @@ $con->write_query(Carbon::Limestone::Query->new(
 say Dumper $con->read_result_blocking;
 
 
+
 $con->write_query(Carbon::Limestone::Query->new(
 	type => 'query', 
 	target => 'Limestone::Table=test_table',
 	data => {
-		type => 'get',
+		type => 'delete',
 		where => {
-			val => 'eq "apple"',
+			key => '< 0',
 		},
 	},
 ));
@@ -117,23 +115,47 @@ $con->write_query(Carbon::Limestone::Query->new(
 	target => 'Limestone::Table=test_table',
 	data => {
 		type => 'get',
-		where => {
-			index => '== 2',
-		},
 	},
 ));
 say Dumper $con->read_result_blocking;
 
-$con->write_query(Carbon::Limestone::Query->new(
-	type => 'query', 
-	target => 'Limestone::Table=test_table',
-	data => {
-		type => 'get',
-		where => {
-			index => '< 5',
-			key => '<= 0',
-		},
-	},
-));
-say Dumper $con->read_result_blocking;
+
+
+# $con->write_query(Carbon::Limestone::Query->new(
+# 	type => 'query', 
+# 	target => 'Limestone::Table=test_table',
+# 	data => {
+# 		type => 'get',
+# 		where => {
+# 			val => 'eq "apple"',
+# 		},
+# 	},
+# ));
+# say Dumper $con->read_result_blocking;
+
+
+# $con->write_query(Carbon::Limestone::Query->new(
+# 	type => 'query', 
+# 	target => 'Limestone::Table=test_table',
+# 	data => {
+# 		type => 'get',
+# 		where => {
+# 			index => '== 2',
+# 		},
+# 	},
+# ));
+# say Dumper $con->read_result_blocking;
+
+# $con->write_query(Carbon::Limestone::Query->new(
+# 	type => 'query', 
+# 	target => 'Limestone::Table=test_table',
+# 	data => {
+# 		type => 'get',
+# 		where => {
+# 			index => '< 5',
+# 			key => '<= 0',
+# 		},
+# 	},
+# ));
+# say Dumper $con->read_result_blocking;
 

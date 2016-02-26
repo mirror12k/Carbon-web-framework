@@ -8,7 +8,7 @@ use feature 'say';
 use IO::File;
 use File::Path;
 use Fcntl;
-use List::Util qw/ sum /;
+use List::Util qw/ sum none /;
 use threads::shared;
 use Thread::Semaphore;
 
@@ -178,6 +178,9 @@ sub query {
 	} elsif ($data->{type} eq 'get') {
 		my $entries = $self->access_table(\&get_entries, $data);
 		return Carbon::Limestone::Result->new(type => 'success', data => $entries);
+	} elsif ($data->{type} eq 'delete') {
+		my $count = $self->edit_table(\&delete_entries, $data);
+		return Carbon::Limestone::Result->new(type => 'success', data => $count);
 	} else {
 		Carbon::Limestone::Result->new(type => 'error', error => "unknown table query type '$data->{type}'")
 	}
@@ -261,7 +264,7 @@ sub insert_entries {
 	$file->seek($table_offset, SEEK_SET);
 	$file->read($buf, 16);
 	my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
-	say "debug table length: $table_length, entries: $current_entries";
+	# say "debug table length: $table_length, entries: $current_entries";
 	# first write the new entries count
 	$file->seek(-8, SEEK_CUR);
 	$file->print(pack 'Q<', $current_entries + @inserted_addresses);
@@ -277,6 +280,101 @@ sub insert_entries {
 	return $current_entries + @inserted_addresses
 }
 
+
+sub delete_entries {
+	my ($self, $query) = @_;
+
+	my $where_filter;
+	$where_filter = $self->compile_where_filter($query->{where}) if defined $query->{where};
+	my $entry_size = $self->table_entry_size;
+
+	# open the table file
+	my $file = IO::File->new($self->filepath . '/table_0.ls_table', 'r+');
+	$file->read(my $buf, 8 * 2);
+	my ($table_offset, $first_entry_offset) = unpack 'Q<Q<', $buf;
+
+	# go to the entries table
+	$file->seek($table_offset, SEEK_SET);
+	$file->read($buf, 16);
+	my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
+
+	# iterate through the entries and find entries to delete
+	my $current_offset = $table_offset + 16;
+	my @deleted_offsets;
+	my @deleted_entries;
+	for (1 .. $current_entries) { # iterate entries table
+		# get the entry address
+		$file->read($buf, 8);
+		$current_offset += 8;
+		my $entry_addr = unpack 'Q<', $buf;
+
+		# read the entry and parse it
+		$file->seek($entry_addr, SEEK_SET);
+		$file->read($buf, $entry_size);
+		my $entry = $self->unpack_entry($buf);
+
+		# filter it if we have a filter, and delete it
+		unless (defined $where_filter and not $where_filter->($entry)) {
+			# say "found entry $entry_addr to delete (table offset: ", $current_offset - 8, ")";
+			push @deleted_offsets, $current_offset - 8;
+			push @deleted_entries, $entry_addr;
+		}
+		# go back to entries table
+		$file->seek($current_offset, SEEK_SET);
+
+
+		# this can probably be optimized by reading multiple offsets at once and then jumping around to read them
+	}
+
+	my $delete_count = @deleted_offsets;
+
+	# now take all entries that we need to delete and clear their taken flag
+	for my $addr (@deleted_entries) {
+		# say "deleted entry $addr";
+		$file->seek($addr, SEEK_SET);
+		$file->print("\0"); # just write a null byte to its flags
+	}
+
+	# now we need to find replacement entries to consolidate the entries table
+	my @replacement_entries;
+	$current_offset = $table_offset + 16 + 8 * $current_entries - 8;
+	my $last_offset = $current_offset - 8 *$delete_count;
+	while ($current_offset > $last_offset and @replacement_entries < $delete_count) {
+		if (none { $current_offset == $_ } @deleted_offsets) { # make sure that the replacement isn't one that we are deleting
+			# TODO: can optimize this down to only 1 comparison
+			$file->seek($current_offset, SEEK_SET);
+			$file->read($buf, 8);
+			# say "found replacement entry $current_offset";
+			push @replacement_entries, unpack 'Q<', $buf;
+		}
+		$current_offset -= 8;
+	}
+
+	# now we replace deleted entries with the found replacements
+	for my $replacement (@replacement_entries) {
+		my $offset = shift(@deleted_offsets);
+		# say "replacing entry at offset $offset";
+		$file->seek($offset, SEEK_SET);
+		$file->print(pack 'Q<', $replacement);
+	}
+
+	# if we didn't have enough replacement entries, that's completely fine
+	# since the deleted offsets are in order, we have replaced any deleted ones at the front already
+	# the back ones will be ignored because we edit the number of current entries to exclude them
+
+	# write the new number of entries to the entry table
+	$file->seek($table_offset + 8, SEEK_SET);
+	# say "deleted $delete_count entries";
+	$file->print(pack 'Q<', $current_entries - $delete_count);
+
+	$file->close;
+
+	# return the count of deleted entries
+	return $delete_count
+}
+
+
+
 # TODO: sanitize this
 sub compile_where_filter {
 	my ($self, $where) = @_;
@@ -288,15 +386,15 @@ sub compile_where_filter {
 		}
 		my ($op, $val) = ($1, $2);
 		if ($op eq '==') {
-			push @code, "\$entry->{$field} == $val";
+			push @code, "\$entry->{'$field'} == $val";
 		} elsif ($op eq '!=') {
-			push @code, "\$entry->{$field} != $val";
+			push @code, "\$entry->{'$field'} != $val";
 		} elsif ($op eq '<') {
-			push @code, "\$entry->{$field} < $val";
+			push @code, "\$entry->{'$field'} < $val";
 		} elsif ($op eq '<=') {
-			push @code, "\$entry->{$field} <= $val";
+			push @code, "\$entry->{'$field'} <= $val";
 		} elsif ($op eq '>') {
-			push @code, "\$entry->{$field} > $val";
+			push @code, "\$entry->{'$field'} > $val";
 		} elsif ($op eq '>=') {
 			push @code, "\$entry->{$field} >= $val";
 		} elsif ($op eq 'eq') {
@@ -307,9 +405,11 @@ sub compile_where_filter {
 	}
 	my $code = join ' and ', @code;
 	$code = "sub { my \$entry = shift; $code }";
-	say "compiling where filter: $code";
+	# say "compiling where filter: $code";
 	return eval $code
 }
+
+
 
 sub get_entries {
 	my ($self, $query) = @_;
@@ -356,6 +456,8 @@ sub get_entries {
 
 	return \@results
 }
+
+
 
 
 

@@ -15,20 +15,43 @@ use Carbon::Limestone::Connection;
 use Carbon::Limestone::Database;
 
 
-# todo:
+# TODO:
 	# add support for http only connection
 	# add support for json based request and response transferring
+	# add support for limestone-pack based request and response transferring
+	# make limestone-pack pack hashes in sorted key order for efficient compression
 	# user and hashed password specification in the headers
-	# and make it so that it's resistant to replay attack
-	# add SSL support to Carbon and move limestone over to SSL
 	# add compression support to requests
 
-	# redo the request/response system using the already inplace thread pool
-		# extend the socket receive functionality
-	# purge Carbon::Limestone::Database, it's unneeded
-	# create a target architecture where the first name is the type, and the next is the name/namespace of it, e.g. 'Collection::TestApp::users'
-		# use this target as an index into a hash with all database items in it
-		# they must all implement execute_query and things like load and store
+	# TODO with table:
+		# multiple parallel files allow reading while writing
+		# allow writing of entries while still reading
+			# just needs a synchronized memory entry manager
+			# and a synchronized entries table
+			# would allow parallelized inserting and deleting of entries with only the memory manager and the synchro'd memory table as bottlenecks
+		# clean up the code
+		# compiled database operations?
+		# dynamic size entries to allow true HUGE strings
+			# can add a flag to entries which indicates an expanded memory entry
+			# expanded memory entry gobbles up memory entries after it (they must be free of course)
+			# if the extended flag is present, then the next <something> int will indicate how many memory entries it has taken
+			# this will allow true huge strings
+		# indexes
+			# probably a binary tree with pointers into the entries table
+			# branch format:
+				# qword - pointer to comparison value
+				# qword - a [branch|entry] pointer to values less than or equal to the comparison value
+				# qword - a [branch|entry] pointer to values greater than the comparison value
+			# branches would be stored in normal entry slots
+		# is there a better way than opening the file everytime?
+		# should inserts and deletions be queued up and then performed in one swoop?
+			# create a thread queue of size X, when an insert or deletion with a LOW_PRIORITY flag happens:
+				# if the queue has less than X elements, the query is simply appended to the queue
+				# if the queue has X number of elements, the queue is dumped and all queries in the queue are blobed together and executed all at once
+				# if the database has a few milliseconds of no queries, it will start a process to perform the queued operations
+			# could get's be queued up for low priority?
+			# what would the return value be? or would there now be a return value with low priority
+
 
 
 our $DEBUG_VALUE = 1 + $Carbon::CARBON_DEBUG_VALUE;
