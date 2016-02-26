@@ -6,6 +6,8 @@ Carbon is a simple multi-threaded http server which mounts a router which routes
 
 The Carbon::Nanotube router is recommended for use with it, however the api is incredibly simple and you can quickly write your own router
 
+for more information, read the comments in https://github.com/mirror12k/Carbon-web-framework/blob/master/Carbon.pm or view some of the test files
+
 ## Carbon::Fiber
 An efficient generic router which allows text or regex routes to basic file directories, subroutines, or mapping to other routes with optional route arguments
 
@@ -19,6 +21,8 @@ A compiler for use with Carbon::Nanotube which compiles dynamic files into a per
 
 ## Carbon::Graphite
 A versatile templating language for Carbon::Anthracite which can seemlessly be used with regular dynamic files via the Carbon::Anthracite::Plugins::Graphite plugin
+
+check https://github.com/mirror12k/Carbon-web-framework/blob/master/Carbon/Graphite/graphite%20spec%20v0.3 for and explaination on how it works
 
 ## Carbon::Limestone
 An effective multi-threaded 64-bit database built on top of Carbon with a plugin for easy use in Anthracite (Carbon::Anthracite::Plugins::LimestoneClient)
