@@ -154,9 +154,9 @@ sub route_map {
 	return $self->route(qr/$path.*/ => sub {
 		my ($self, $req, $res) = @_;
 		my $new_path = $req->uri->path;
-		say "debug matched: ", $new_path;
+		# say "debug matched: ", $new_path;
 		return $res unless $new_path =~ s/\A$path/$map/; # replace or fail out
-		say "debug transformed: ", $new_path;
+		# say "debug transformed: ", $new_path;
 
 		my $route_args = join '&', map "$_=$+{$_}", keys %+;
 		if (defined $req->uri->query and $req->uri->query ne '') {

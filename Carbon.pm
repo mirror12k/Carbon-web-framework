@@ -292,7 +292,7 @@ sub accept_new_connections {
 		$self->socket_selector->add($sock); # add it to the selector
 
 		$self->socket_data->{"$sock"} = { socket => $sock, buffer => '', request => undef };
-		say "new connection: $sock"; # FH DEBUG
+		# say "new connection: $sock"; # FH DEBUG
 	}
 }
 
@@ -320,7 +320,7 @@ sub update_sockets {
 		unless (defined $socket_data->{request}) {
 			# otherwise check if it's ready for header processing
 			if ($socket_data->{buffer} =~ /\r?\n\r?\n/) {
-				say "serving request: $fh"; # FH DEBUG
+				# say "serving request: $fh"; # FH DEBUG
 				my ($header, $body) = split /\r?\n\r?\n/, $socket_data->{buffer}, 2;
 				my $req = $self->parse_http_header($header);
 
@@ -408,7 +408,7 @@ sub delete_socket {
 	delete $self->socket_data->{"$sock"}; #delete all of its data
 	# delete $socket_data{"$sock"}; # delete its cache
 	$sock->close; # close it
-	say "socket disconnected: $sock"; # FH DEBUG
+	# say "socket disconnected: $sock"; # FH DEBUG
 }
 
 
