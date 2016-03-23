@@ -16,6 +16,6 @@ my $srv = Carbon->new( debug => 1 );
 my $rtr = Carbon::CGI->new( debug => 1 );
 $srv->router($rtr);
 
-$rtr->route_cgi('/' => './cgi-bin/');
+$rtr->route_cgi('/' => './cgi-bin/', { default_file => 'index.php' });
 
 $srv->start_server;

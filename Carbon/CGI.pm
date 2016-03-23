@@ -30,6 +30,7 @@ sub route_cgi {
 	my ($self, $path, $directory, $opts) = @_;
 
 	my $suffix = $opts->{suffix} // ''; # allows a file suffix to be appended
+	my $default_file = $opts->{default_file} // 'index'; # allows different default files to be named
 
 	return $self->route(qr/$path.*/ => sub {
 		my ($self, $req, $res) = @_;
@@ -43,8 +44,9 @@ sub route_cgi {
 
 		if (-e -f "$loc$suffix") { # if the file exists
 			$res = $self->execute_cgi("$loc$suffix", $req);
-		# } elsif (-d $loc and -e -f "$loc/index$suffix") { # if it's a directory, but we have an index file
-		# 	$res = $self->execute_dynamic_file("$loc/index$suffix", $req, $res);
+		} elsif (-d $loc and -e -f "$loc/$default_file$suffix") { # if it's a directory, but we have an index file
+			$res = $self->execute_cgi("$loc/$default_file$suffix", $req);
+			# $res = $self->execute_dynamic_file("$loc/index$suffix", $req, $res);
 
 		} else { # otherwise it's not found
 			$res //= Carbon::Response->new;
