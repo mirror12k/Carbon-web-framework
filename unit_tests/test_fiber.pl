@@ -14,6 +14,21 @@ use threads;
 
 
 
+sub test_results {
+	my ($test_name, $test_values, $expected_values) = @_;
+
+	my $success = 1;
+	for my $i (0 .. $#$test_values) {
+		if ($test_values->[$i] ne $expected_values->[$i]) {
+			warn "$test_name failed: server returned: [$test_values->[$i]], expected: [$expected_values->[$i]]";
+			$success = 0;
+		}
+	}
+
+	return $success
+}
+
+
 
 sub test_path {
 	my $success = 1;
@@ -42,27 +57,16 @@ sub test_path {
 	my $ua = LWP::UserAgent->new;
 	$res = $ua->get("http://localhost:2048/");
 
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'path was: "/"');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'path was: "/"']);
 
 	$res = $ua->get('http://localhost:2048/hello/world?nope');
 
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'path was: "/hello/world"');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'path was: "/hello/world"']);
+	
 	warn "$test_name passed\n" if $success;
 
 	$thr->kill('SIGINT');
@@ -100,37 +104,19 @@ sub test_basic {
 	my $ua = LWP::UserAgent->new;
 
 	$res = $ua->get("http://localhost:2048/");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('400', 'Bad Request', 'HTTP/1.1', 'Bad Request');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['400', 'Bad Request', 'HTTP/1.1', 'Bad Request']);
 
 	$res = $ua->get("http://localhost:2048/asdf");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'success!');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'success!']);
 
 	$res = $ua->get("http://localhost:2048/asdf?query=true&a=b#frag");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'success!');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'success!']);
 
 	$thr->kill('SIGINT');
 	$thr->join;
@@ -173,37 +159,19 @@ sub test_hijack {
 	my $ua = LWP::UserAgent->new;
 
 	$res = $ua->get("http://localhost:2048/asdf");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'success!');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'success!']);
 
 	$res = $ua->get("http://localhost:2048/asdf/nope");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'success!');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'success!']);
 
 	$res = $ua->get("http://localhost:2048/asdf/qwerty");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'success! hijack!');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'success! hijack!']);
 
 	$thr->kill('SIGINT');
 	$thr->join;
@@ -235,48 +203,24 @@ sub test_dir {
 	my $ua = LWP::UserAgent->new;
 
 	$res = $ua->get("http://localhost:2048/test/index");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'hello index!');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'hello index!']);
 
 	$res = $ua->get("http://localhost:2048/test/world.txt");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'hello world!');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'hello world!']);
 
 	$res = $ua->get("http://localhost:2048/test/");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('403', 'Forbidden', 'HTTP/1.1', 'Forbidden');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['403', 'Forbidden', 'HTTP/1.1', 'Forbidden']);
 
 	$res = $ua->get("http://localhost:2048/");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('400', 'Bad Request', 'HTTP/1.1', 'Bad Request');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['400', 'Bad Request', 'HTTP/1.1', 'Bad Request']);
 
 	$thr->kill('SIGINT');
 	$thr->join;
@@ -315,15 +259,9 @@ sub test_map {
 	my $ua = LWP::UserAgent->new;
 
 	$res = $ua->get("http://localhost:2048/qwerty");
-	@test_values = ($res->code, $res->message, $res->protocol, $res->decoded_content);
-	@expected_values = ('200', 'OK', 'HTTP/1.1', 'yes, this is asdf');
-
-	for my $i (0 .. $#test_values) {
-		if ($test_values[$i] ne $expected_values[$i]) {
-			warn "$test_name failed: server returned: [$test_values[$i]], expected: [$expected_values[$i]]";
-			$success = 0;
-		}
-	}
+	test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content],
+		['200', 'OK', 'HTTP/1.1', 'yes, this is asdf']);
 
 	$thr->kill('SIGINT');
 	$thr->join;
