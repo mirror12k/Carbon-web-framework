@@ -8,6 +8,7 @@ use LWP::UserAgent;
 use WWW::Mechanize;
 use Thread::Pool;
 use threads;
+use Carp;
 
 use lib '..';
 use Carbon;
@@ -21,7 +22,7 @@ sub test_results {
 	my $success = 1;
 	for my $i (0 .. $#$test_values) {
 		if ($test_values->[$i] ne $expected_values->[$i]) {
-			warn "$test_name failed: server returned: [$test_values->[$i]], expected: [$expected_values->[$i]]";
+			confess "$test_name failed: server returned: [$test_values->[$i]], expected: [$expected_values->[$i]]";
 			$success = 0;
 		}
 	}
@@ -150,10 +151,10 @@ sub test_threaded_stress {
 
 
 
+warn "carbon stress testing:\n";
 
 test_linear_stress;
 test_threaded_stress;
 
-
-say 'done';
+warn "done\n";
 

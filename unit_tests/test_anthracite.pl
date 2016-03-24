@@ -7,6 +7,7 @@ use feature 'say';
 use LWP::UserAgent;
 use WWW::Mechanize;
 use threads;
+use Carp;
 
 use lib '..';
 use Carbon::Nanotube;
@@ -21,7 +22,7 @@ sub test_results {
 	my $success = 1;
 	for my $i (0 .. $#$test_values) {
 		if ($test_values->[$i] ne $expected_values->[$i]) {
-			warn "$test_name failed: server returned: [$test_values->[$i]], expected: [$expected_values->[$i]]";
+			confess "$test_name failed: server returned: [$test_values->[$i]], expected: [$expected_values->[$i]]";
 			$success = 0;
 		}
 	}
@@ -90,7 +91,8 @@ sub test_basic {
 	return $success
 }
 
+warn "anthracite testing:\n";
 
 test_basic;
 
-say "done";
+warn "done\n";

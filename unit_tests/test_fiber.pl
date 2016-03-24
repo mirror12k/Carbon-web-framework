@@ -7,11 +7,11 @@ use feature 'say';
 use LWP::UserAgent;
 use WWW::Mechanize;
 use threads;
+use Carp;
 
 use lib '..';
 use Carbon;
 use Carbon::Fiber;
-
 
 
 sub test_results {
@@ -20,7 +20,7 @@ sub test_results {
 	my $success = 1;
 	for my $i (0 .. $#$test_values) {
 		if ($test_values->[$i] ne $expected_values->[$i]) {
-			warn "$test_name failed: server returned: [$test_values->[$i]], expected: [$expected_values->[$i]]";
+			confess "$test_name failed: server returned: [$test_values->[$i]], expected: [$expected_values->[$i]]";
 			$success = 0;
 		}
 	}
@@ -273,7 +273,7 @@ sub test_map {
 
 
 
-
+warn "fiber testing:\n";
 
 test_path;
 test_basic;
@@ -281,6 +281,6 @@ test_hijack;
 test_dir;
 test_map;
 
-say "done";
+warn "done\n";
 
 
