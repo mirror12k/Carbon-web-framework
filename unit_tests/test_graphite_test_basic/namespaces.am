@@ -1,0 +1,9 @@
+<?graphite
+
+#namespace magic
+	#template moremagic::huzzah
+		<p> it is i, the great huzzah </p>
+	#/
+#/
+
+@magic::moremagic::huzzah

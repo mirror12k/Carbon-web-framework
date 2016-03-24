@@ -99,12 +99,12 @@ sub test_include {
 	my $rtr = Carbon::Nanotube->new;
 	$rtr->init_thread;
 
-	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/include_test.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+	$res = $rtr->execute_dynamic_file('test_anthracite_test_include/include_test.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
 
 	$success = $success and test_results($test_name =>
 		[$res->code, $res->content],
 		['200', 'hello world!']);
-	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/subdir/long_include.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+	$res = $rtr->execute_dynamic_file('test_anthracite_test_include/subdir/long_include.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
 
 	# say "got result: ", $res->as_string;
 	$success = $success and test_results($test_name =>

@@ -1,0 +1,19 @@
+<?graphite
+
+#template iaresmart
+	<p>got $_:
+	#if ($_ eq 1)
+		it is 1
+	#/
+	#elsif ($_ > 1)
+		it is greater than 1
+	#/
+	#else
+		it is less than 1
+	#/
+	</p>
+#/
+
+@iaresmart->5
+@iaresmart->-5
+@iaresmart->1

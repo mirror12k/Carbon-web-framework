@@ -1,3 +1,0 @@
-<?perl
-
-$runtime->include("test_anthracite_test_basic/include_test.am");

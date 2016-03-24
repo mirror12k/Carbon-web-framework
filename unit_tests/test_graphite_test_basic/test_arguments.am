@@ -1,0 +1,22 @@
+<?graphite
+
+#template one_arg
+	<h1>one arg: $_</h1>
+#/
+
+#template more_args
+	<h1>more args:</h1>
+	#foreach $_
+		<p>item: $_</p>
+	#/
+#/
+
+#template hash_args
+	<div type='$type'>name: $name, job: $job</div>
+#/
+
+<body>
+<div>@one_arg->'hello world'</div>
+<div>@more_args->['hello world', 'test val']</div>
+<div>@hash_args->{ type => 'desc', name => 'steve', job => 'magician' }</div>
+</body>

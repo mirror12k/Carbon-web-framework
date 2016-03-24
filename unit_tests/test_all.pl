@@ -8,8 +8,9 @@ use feature 'say';
 say `./test_uri.pl`;
 say `./test_request.pl`;
 say `./test_response.pl`;
-say `./test_fiber.pl`;
 say `./test_anthracite.pl`;
+say `./test_graphite.pl`;
+say `./test_fiber.pl`;
 say `./test_carbon_stress.pl`;
 
 

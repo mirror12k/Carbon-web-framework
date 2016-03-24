@@ -1,0 +1,7 @@
+<?graphite
+
+#template test_template
+	<h1>inside of template!</h1>
+#/
+
+<div>@test_template</div>
