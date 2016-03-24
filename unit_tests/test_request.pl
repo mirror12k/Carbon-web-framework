@@ -18,7 +18,7 @@ sub test_results {
 	my $success = 1;
 	for my $i (0 .. $#$test_values) {
 		if ($test_values->[$i] ne $expected_values->[$i]) {
-			confess "$test_name failed: server returned: [$test_values->[$i]], expected: [$expected_values->[$i]]";
+			confess "$test_name failed: got: [$test_values->[$i]], expected: [$expected_values->[$i]]";
 			$success = 0;
 		}
 	}
