@@ -305,7 +305,7 @@ sub compile_inc_hash {
 sub helper_template {
 	my ($helper, $engine, $text) = @_;
 
-	$text =~ s/\A($graphite_name_regex(?:::$graphite_name_regex)*)\s+?//ms or die '"template" helper requires a text name at start';
+	$text =~ s/\A\s*($graphite_name_regex(?:::$graphite_name_regex)*)\s+?//ms or die '"template" helper requires a text name at start';
 	my $name = $1;
 
 	my $code =
@@ -326,7 +326,7 @@ my \$output = '';
 
 sub helper_foreach {
 	my ($helper, $engine, $text) = @_;
-	$text =~ s/\A($graphite_variable_regex)\b//ms or die '"foreach" helper requires variable name at start';
+	$text =~ s/\A\s*($graphite_variable_regex)\b//ms or die '"foreach" helper requires variable name at start';
 	my $name = $1;
 	$name = $engine->compile_inc_val($name);
 	my $code =
@@ -403,7 +403,7 @@ sub helper_else {
 
 sub helper_with {
 	my ($helper, $engine, $text) = @_;
-	$text =~ s/\A(\$[a-zA-Z0-9_]+)\b//ms or die '"with" helper requires variable name at start';
+	$text =~ s/\A\s*(\$[a-zA-Z0-9_]+)\b//ms or die '"with" helper requires variable name at start';
 	my $name = $1;
 	$name = $engine->compile_inc_val($name);
 	my $code =
@@ -420,7 +420,7 @@ my \$arg = $name;
 
 sub helper_namespace {
 	my ($helper, $engine, $text) = @_;
-	$text =~ s/\A([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\b//ms or die '"namespace" helper requires namespace name at start';
+	$text =~ s/\A\s*([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\b//ms or die '"namespace" helper requires namespace name at start';
 	my $name = $1;
 	my $code =
 "

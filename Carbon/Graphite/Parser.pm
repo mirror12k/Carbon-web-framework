@@ -37,11 +37,11 @@ sub get_token {
 	# get a token from text
 	while ($self->{text} =~
 			m/\G
-				((\#([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\s+)|
+				((\#([a-zA-Z0-9_]+(?:::[a-zA-Z0-9_]+)*)\b)|
 				(\#\/)|
 				(\#\#\#(.*?)(?:\#\#\#|\Z))|
 				(.+?)(?:(?=\#)|\Z)) # match regular text
-			/smxg) {
+			/sxg) {
 		my ($raw, $helper, $helper_name, $end_helper, $comment, $comment_text, $text) = ($1, $2, $3, $4, $5, $6, $7);
 		# say "debug:  $helper, $helper_name, $end_helper, $text";
 		if (defined $helper) {
