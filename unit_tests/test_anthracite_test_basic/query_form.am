@@ -1,0 +1,5 @@
+<?perl
+echo "query:\n";
+for my $key (sort keys %{$runtime->query_form}) {
+	echo "$key=>" . $runtime->query_form->{$key} . "\n";
+}

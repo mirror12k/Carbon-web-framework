@@ -1,0 +1,4 @@
+<?perl
+
+return $runtime->redirect('/lolredirect');
+

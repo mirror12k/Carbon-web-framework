@@ -1,0 +1,5 @@
+<?perl
+echo "post:\n";
+for my $key (sort keys %{$runtime->post_form}) {
+	echo "$key=>" . $runtime->post_form->{$key} . "\n";
+}
