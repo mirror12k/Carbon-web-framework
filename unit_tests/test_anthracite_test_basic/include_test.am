@@ -1,0 +1,3 @@
+<?perl
+
+$runtime->include("test_anthracite_test_basic/hello_world.am");

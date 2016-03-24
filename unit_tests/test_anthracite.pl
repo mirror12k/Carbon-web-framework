@@ -81,7 +81,6 @@ sub test_basic {
 	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/redirect.am',
 		Carbon::Request->new('GET', Carbon::URI->parse('/'), { 'content-type' => ['application/x-www-form-urlencoded'] }, ''));
 
-	# say "got result: ", $res->as_string;
 	$success = $success and test_results($test_name =>
 		[$res->code, $res->header('location')],
 		['303', "/lolredirect"]);
@@ -91,8 +90,35 @@ sub test_basic {
 	return $success
 }
 
+
+sub test_include {
+	my $success = 1;
+	my ($res, $req);
+	my $test_name = 'test include';
+
+	my $rtr = Carbon::Nanotube->new;
+	$rtr->init_thread;
+
+	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/include_test.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->content],
+		['200', 'hello world!']);
+	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/subdir/long_include.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+
+	# say "got result: ", $res->as_string;
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->content],
+		['200', 'hello world!']);
+
+
+	warn "$test_name passed\n" if $success;
+	return $success
+}
+
 warn "anthracite testing:\n";
 
 test_basic;
+test_include;
 
 warn "done\n";
