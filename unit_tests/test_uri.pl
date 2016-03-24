@@ -28,10 +28,10 @@ sub test_results {
 
 
 
-sub test_uris {
+sub test_uri_compiling {
 	my $success = 1;
 	my ($uri);
-	my $test_name = 'test path';
+	my $test_name = 'test uri compiling';
 
 	$uri = Carbon::URI->new;
 	$uri->path('/');
@@ -56,6 +56,19 @@ sub test_uris {
 	$uri->path(undef);
 	$uri->fragment(undef);
 	$success = $success and test_results($test_name => [$uri->as_string], ['magic://google.com:245']);
+
+
+	warn "$test_name passed\n" if $success;
+
+	return $success
+}
+
+
+
+sub test_uri_parsing {
+	my $success = 1;
+	my ($uri);
+	my $test_name = 'test uri parsing';
 
 
 	$uri = Carbon::URI->parse('/');
@@ -88,15 +101,18 @@ sub test_uris {
 		['asdf.com', '']);
 
 
-
 	warn "$test_name passed\n" if $success;
 
 	return $success
 }
 
+
+
+
 warn "uri testing:\n";
 
-test_uris;
+test_uri_compiling;
+test_uri_parsing;
 
 warn "done\n";
 

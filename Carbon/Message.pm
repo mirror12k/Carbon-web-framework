@@ -42,7 +42,7 @@ sub header {
 		return unless exists $self->{headers}{$key};
 	}
 
-	return @{$self->{headers}{$key}} if wantarray;
+	# return @{$self->{headers}{$key}} if wantarray;
 	return join ", ", @{$self->{headers}{$key}};
 }
 
