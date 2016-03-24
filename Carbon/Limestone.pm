@@ -56,9 +56,6 @@ use Carbon::Limestone::Database;
 
 our $DEBUG_VALUE = 1 + $Carbon::CARBON_DEBUG_VALUE;
 
-# use Fcntl ':flock';
-# flock($file, LOCK_EX|LOCK_NB)
-
 sub new {
 	my $class = shift;
 	my %args = @_;
@@ -246,7 +243,6 @@ sub serve_limestone_query {
 	}
 
 	return $ret
-	# return Carbon::Limestone::Result->new(type => 'success', data => 'working');
 }
 
 

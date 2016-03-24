@@ -82,6 +82,8 @@ memory layout of table file:
 	8 bytes - pointer to first entry
 	8 bytes - pointer to last entry
 	8 bytes - pointer to first empty entry
+	8 bytes - number of entries
+	8 bytes - number of used entries
 	8 bytes - null indicator end of header
 
 	entries table

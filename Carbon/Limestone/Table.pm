@@ -90,7 +90,7 @@ sub create {
 	# varous values for table file
 	my $entry_count = 256;
 	my $entry_size = $self->table_entry_size;
-	my $header_size = 5 * 8;
+	my $header_size = $self->table_header_length;
 
 	my $entry_table_offset = $header_size;
 	my $entry_table_size = 16 + 8 * $entry_count;
@@ -101,11 +101,20 @@ sub create {
 
 	# initialize table file
 	$file = IO::File->new($self->filepath . '/table_0.ls_table', 'w');
-	# entry table offset, first entry offset
-	$file->print(pack 'Q<', $entry_table_offset);
-	$file->print(pack 'Q<Q<Q<', $entries_offset, $last_entry_offset, $first_free_entry_offset);
-	# null header terminator
-	$file->print(pack 'Q<', 0);
+
+	$self->write_table_header($file, {
+		entry_table_offset => $entry_table_offset,
+		first_entry_offset => $entries_offset,
+		last_entry_offset => $last_entry_offset,
+		first_free_entry_offset => $first_free_entry_offset,
+		entry_count => $entry_count,
+		used_entry_count => 0,
+	}, 1);
+	# # entry table offset, first entry offset
+	# $file->print(pack 'Q<', $entry_table_offset);
+	# $file->print(pack 'Q<Q<Q<', $entries_offset, $last_entry_offset, $first_free_entry_offset);
+	# # null header terminator
+	# $file->print(pack 'Q<', 0);
 	# entry table array size, entries in table
 	$file->print(pack 'Q<Q<', $entry_count, 0);
 	# table entries (initally all null)
@@ -234,6 +243,42 @@ sub decrement_table_reference_count {
 	$self->table_reference_semaphore->up;
 }
 
+
+# primary editting operations:
+
+sub table_header_length { 7 * 8 }
+
+sub write_table_header {
+	my ($self, $file, $data, $noseek) = @_;
+
+
+	$file->seek(0, SEEK_SET) unless $noseek;
+
+	$data = pack 'Q<Q<Q<Q<Q<Q<Q<',
+		$data->{entry_table_offset},
+		$data->{first_entry_offset}, $data->{last_entry_offset}, $data->{first_free_entry_offset},
+		$data->{entry_count}, $data->{used_entry_count},
+		0; # null header terminator
+
+	$file->print($data);
+}
+
+sub read_table_header {
+	my ($self, $file, $noseek) = @_;
+
+	$file->seek(0, SEEK_SET) unless $noseek;
+
+	$file->read(my $buf, $self->table_header_length);
+
+	my %data;
+	@data{qw/ entry_table_offset
+		first_entry_offset last_entry_offset first_free_entry_offset
+		entry_count used_entry_count /} = unpack 'Q<Q<Q<Q<Q<Q<', $buf;
+
+	return \%data
+}
+
+
 sub insert_entries {
 	my ($self, $entries) = @_;
 	# entries are already packed to prevent wasting cpu in locked context
@@ -243,13 +288,14 @@ sub insert_entries {
 
 	# open the table file
 	my $file = IO::File->new($self->filepath . '/table_0.ls_table', 'r+');
-	$file->read(my $buf, 8 * 2);
-	my ($table_offset, $first_entry_offset) = unpack 'Q<Q<', $buf;
+
+	my $header = $self->read_table_header($file, 1);
 
 	# insert data into free entries
-	$file->seek($first_entry_offset, SEEK_SET);
-	while (@to_insert) {
-		$file->read($buf, 1);
+	$file->seek($header->{first_entry_offset}, SEEK_SET);
+	my $offset = $header->{first_entry_offset};
+	while (@to_insert and $offset <= $header->{last_entry_offset}) {
+		$file->read(my $buf, 1);
 		my $taken = 0x1 & ord $buf;
 		if ($taken) {
 			$file->seek($self->table_entry_size - 1, SEEK_CUR);
@@ -258,11 +304,17 @@ sub insert_entries {
 			push @inserted_addresses, $file->tell;
 			$file->print("\x01" . shift @to_insert);
 		}
+		$offset += $self->table_entry_size;
+	}
+
+	# if we still have entries, it means we've reached the end of the table
+	if (@to_insert) {
+		die "end of table";
 	}
 	
 	# go the the entries table
-	$file->seek($table_offset, SEEK_SET);
-	$file->read($buf, 16);
+	$file->seek($header->{entry_table_offset}, SEEK_SET);
+	$file->read(my $buf, 16);
 	my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
 	# say "debug table length: $table_length, entries: $current_entries";
 	# first write the new entries count
@@ -290,16 +342,18 @@ sub delete_entries {
 
 	# open the table file
 	my $file = IO::File->new($self->filepath . '/table_0.ls_table', 'r+');
-	$file->read(my $buf, 8 * 2);
-	my ($table_offset, $first_entry_offset) = unpack 'Q<Q<', $buf;
+
+	my $header = $self->read_table_header($file, 1);
+
+	my $buf;
 
 	# go to the entries table
-	$file->seek($table_offset, SEEK_SET);
+	$file->seek($header->{entry_table_offset}, SEEK_SET);
 	$file->read($buf, 16);
 	my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
 
 	# iterate through the entries and find entries to delete
-	my $current_offset = $table_offset + 16;
+	my $current_offset = $header->{entry_table_offset} + 16;
 	my @deleted_offsets;
 	my @deleted_entries;
 	for (1 .. $current_entries) { # iterate entries table
@@ -337,7 +391,7 @@ sub delete_entries {
 
 	# now we need to find replacement entries to consolidate the entries table
 	my @replacement_entries;
-	$current_offset = $table_offset + 16 + 8 * $current_entries - 8;
+	$current_offset = $header->{entry_table_offset} + 16 + 8 * $current_entries - 8;
 	my $last_offset = $current_offset - 8 *$delete_count;
 	while ($current_offset > $last_offset and @replacement_entries < $delete_count) {
 		if (none { $current_offset == $_ } @deleted_offsets) { # make sure that the replacement isn't one that we are deleting
@@ -363,7 +417,7 @@ sub delete_entries {
 	# the back ones will be ignored because we edit the number of current entries to exclude them
 
 	# write the new number of entries to the entry table
-	$file->seek($table_offset + 8, SEEK_SET);
+	$file->seek($header->{entry_table_offset} + 8, SEEK_SET);
 	# say "deleted $delete_count entries";
 	$file->print(pack 'Q<', $current_entries - $delete_count);
 
@@ -423,15 +477,18 @@ sub get_entries {
 
 	# open the file and read the table pointer
 	my $file = IO::File->new($self->filepath . '/table_0.ls_table', 'r+');
-	$file->read(my $buf, 8);
-	my ($table_offset) = unpack 'Q<', $buf;
+
+	my $header = $self->read_table_header($file, 1);
+
+	# $file->read(my $buf, 8);
+	# my ($table_offset) = unpack 'Q<', $buf;
 
 	# go to the entries table
-	$file->seek($table_offset, SEEK_SET);
-	$file->read($buf, 16);
+	$file->seek($header->{entry_table_offset}, SEEK_SET);
+	$file->read(my $buf, 16);
 	my (undef, $current_entries) = unpack 'Q<Q<', $buf;
 
-	my $current_offset = $table_offset + 16;
+	my $current_offset = $header->{entry_table_offset} + 16;
 	for (1 .. $current_entries) { # iterate entries table
 		# get the entry address
 		$file->read($buf, 8);
