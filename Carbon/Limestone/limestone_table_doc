@@ -1,6 +1,6 @@
 
 
-v0.1
+v0.2
 
 
 limestone database structure
@@ -85,11 +85,7 @@ memory layout of table file:
 	8 bytes - number of entries
 	8 bytes - number of used entries
 	8 bytes - null indicator end of header
-
-	entries table
-		8 bytes - length of entries table
-		8 bytes - number of entries currently in table
-		8 bytes [] - pointers to entries
+	8 bytes [] -  table of pointers to entries
 
 		- to resize entries table; the new table length is calculated, any entry slots in that memory space will be relocated and their pointers will be re-pointed
 

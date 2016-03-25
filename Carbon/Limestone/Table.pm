@@ -93,7 +93,7 @@ sub create {
 	my $header_size = $self->table_header_length;
 
 	my $entry_table_offset = $header_size;
-	my $entry_table_size = 16 + 8 * $entry_count;
+	my $entry_table_size = 8 * $entry_count;
 
 	my $entries_offset = $entry_table_offset + $entry_table_size;
 	my $last_entry_offset = $entries_offset + ($entry_count - 1) * $entry_size;
@@ -111,8 +111,8 @@ sub create {
 		used_entry_count => 0,
 	}, 1);
 
-	# entry table array size, entries in table
-	$file->print(pack 'Q<Q<', $entry_count, 0);
+	# # entry table array size, entries in table
+	# $file->print(pack 'Q<Q<', $entry_count, 0);
 	# table entries (initally all null)
 	$file->print(pack 'Q<', 0) for 1 .. $entry_count;
 	# entries (all null)
@@ -280,21 +280,21 @@ sub expand_table_file {
 	my $additional_entries = $header->{entry_count};
 
 	# calculate how many entry slots will be displaced
-	my $new_entry_table_memory = 8 * 2 + 8 * $header->{entry_count} + 8 * $additional_entries;
+	my $new_entry_table_memory = 8 * $header->{entry_count} + 8 * $additional_entries;
 
-	say " $new_entry_table_memory - ($header->{first_entry_offset} - $header->{entry_table_offset}) ";
+	# say " $new_entry_table_memory - ($header->{first_entry_offset} - $header->{entry_table_offset}) ";
 	my $entries_reposessed = $new_entry_table_memory - ($header->{first_entry_offset} - $header->{entry_table_offset});
 	$entries_reposessed /= $self->table_entry_size;
 	$entries_reposessed = 1 + int $entries_reposessed if $entries_reposessed != int $entries_reposessed;
 
-	say "entries_reposessed: $entries_reposessed";
+	# say "entries_reposessed: $entries_reposessed";
 
 	# read the displaced entries
 	$file->seek($header->{first_entry_offset}, SEEK_SET);
 	$file->read(my $moved_entries, $entries_reposessed * $self->table_entry_size);
 
 	# null the new entry table values
-	$file->seek($header->{entry_table_offset} + $additional_entries * 8 + 2 * 8, SEEK_SET);
+	$file->seek($header->{entry_table_offset} + $additional_entries * 8, SEEK_SET);
 	$file->print(pack 'Q<', 0) for 1 .. $additional_entries;
 
 	# get a mapping of relocated offsets
@@ -306,12 +306,12 @@ sub expand_table_file {
 	$header->{first_entry_offset} = $header->{first_entry_offset} + $entries_reposessed * $self->table_entry_size;
 
 	# write the displaced entries to the end
-	say "adding ", length($moved_entries), " bytes at offset ", $header->{last_entry_offset} + $self->table_entry_size;
+	# say "adding ", length($moved_entries), " bytes at offset ", $header->{last_entry_offset} + $self->table_entry_size;
 	$file->seek($header->{last_entry_offset} + $self->table_entry_size, SEEK_SET);
 	$file->print($moved_entries);
 
 	# write null entries to the new entry slots
-	say "adding ", $additional_entries * $self->table_entry_size, " bytes at offset ", $file->tell;
+	# say "adding ", $additional_entries * $self->table_entry_size, " bytes at offset ", $file->tell;
 	my $null_entry = "\0" x $self->table_entry_size;
 	$file->print($null_entry) for 1 .. $additional_entries;
 
@@ -319,12 +319,12 @@ sub expand_table_file {
 	$header->{last_entry_offset} = $header->{last_entry_offset} + $self->table_entry_size * $additional_entries + length $moved_entries;
 
 	# go to the start of the entry table
-	$file->seek($header->{entry_table_offset} + 2 * 8, SEEK_SET);
+	$file->seek($header->{entry_table_offset}, SEEK_SET);
 	$file->read(my $buf, 8);
 	my $pointer = unpack 'Q<', $buf;
 	while ($pointer != 0) {
 		if (exists $relocated_offsets{$pointer}) {
-			say "relocated pointer $pointer";
+			# say "relocated pointer $pointer";
 			$file->seek(-8, SEEK_CUR);
 			$file->print(pack 'Q<', $relocated_offsets{$pointer});
 		}
@@ -352,15 +352,11 @@ sub insert_entries {
 	my $header = $self->read_table_header($file, 1);
 
 	my $loop = 0;
-	say "debug: $header->{entry_count} < $header->{used_entry_count} + ", scalar @to_insert;
+	# say "debug: $header->{entry_count} < $header->{used_entry_count} + ", scalar @to_insert;
 	while ($header->{entry_count} < $header->{used_entry_count} + @to_insert) {
 		$self->expand_table_file($file, $header);
-		die "loop $loop" if $loop++ > 2;
-		# die "not enough room";
+		die "loop $loop" if $loop++ > 5;
 	}
-
-	$header->{used_entry_count} += @to_insert;
-	$self->write_table_header($file, $header);
 
 	# insert data into free entries
 	$file->seek($header->{first_entry_offset}, SEEK_SET);
@@ -369,10 +365,8 @@ sub insert_entries {
 		$file->read(my $buf, 1);
 		my $taken = 0x1 & ord $buf;
 		if ($taken) {
-			say "entry taken";
 			$file->seek($self->table_entry_size - 1, SEEK_CUR);
 		} else {
-			say "free ent";
 			$file->seek(-1, SEEK_CUR);
 			push @inserted_addresses, $file->tell;
 			$file->print("\x01" . shift @to_insert);
@@ -381,28 +375,30 @@ sub insert_entries {
 	}
 
 	# if we still have entries, it means we've reached the end of the table
-	if (@to_insert) {
-		die "end of table, we still have ", scalar	@to_insert;
-	}
+	die "corrupt table: reached end of table but still have ", scalar (@to_insert), " entries to write" if @to_insert;
 	
 	# go the the entries table
-	$file->seek($header->{entry_table_offset}, SEEK_SET);
-	$file->read(my $buf, 16);
-	my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
+	# $file->seek($header->{entry_table_offset}, SEEK_SET);
+	# $file->read(my $buf, 16);
+	# my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
 	# say "debug table length: $table_length, entries: $current_entries";
 	# first write the new entries count
-	$file->seek(-8, SEEK_CUR);
-	$file->print(pack 'Q<', $current_entries + @inserted_addresses);
+	# $file->seek(-8, SEEK_CUR);
+	# $file->print(pack 'Q<', $current_entries + @inserted_addresses);
 
-	$file->seek($current_entries * 8, SEEK_CUR); # seek to end of table
+	$file->seek($header->{entry_table_offset} + $header->{used_entry_count} * 8, SEEK_SET); # seek to end of table
 	# now write the addresses into the entries table
 	for my $addr (@inserted_addresses) {
 		$file->print(pack 'Q<', $addr);
 	}
 
+
+	$header->{used_entry_count} += @$entries;
+	$self->write_table_header($file, $header);
+
 	$file->close;
 
-	return $current_entries + @inserted_addresses
+	return $header->{used_entry_count}
 }
 
 
@@ -420,16 +416,17 @@ sub delete_entries {
 
 	my $buf;
 
-	# go to the entries table
-	$file->seek($header->{entry_table_offset}, SEEK_SET);
-	$file->read($buf, 16);
-	my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
+	# # go to the entries table
+	# $file->read($buf, 16);
+	# my (undef, $current_entries) = unpack 'Q<Q<', $buf;
 
 	# iterate through the entries and find entries to delete
-	my $current_offset = $header->{entry_table_offset} + 16;
+	my $current_offset = $header->{entry_table_offset};
 	my @deleted_offsets;
 	my @deleted_entries;
-	for (1 .. $current_entries) { # iterate entries table
+
+	$file->seek($header->{entry_table_offset}, SEEK_SET);
+	for (1 .. $header->{used_entry_count}) { # iterate entries table
 		# get the entry address
 		$file->read($buf, 8);
 		$current_offset += 8;
@@ -464,8 +461,8 @@ sub delete_entries {
 
 	# now we need to find replacement entries to consolidate the entries table
 	my @replacement_entries;
-	$current_offset = $header->{entry_table_offset} + 16 + 8 * $current_entries - 8;
-	my $last_offset = $current_offset - 8 *$delete_count;
+	$current_offset = $header->{entry_table_offset} + 8 * $header->{used_entry_count} - 8;
+	my $last_offset = $current_offset - 8 * $delete_count;
 	while ($current_offset > $last_offset and @replacement_entries < $delete_count) {
 		if (none { $current_offset == $_ } @deleted_offsets) { # make sure that the replacement isn't one that we are deleting
 			# TODO: can optimize this down to only 1 comparison
@@ -489,10 +486,10 @@ sub delete_entries {
 	# since the deleted offsets are in order, we have replaced any deleted ones at the front already
 	# the back ones will be ignored because we edit the number of current entries to exclude them
 
-	# write the new number of entries to the entry table
-	$file->seek($header->{entry_table_offset} + 8, SEEK_SET);
-	# say "deleted $delete_count entries";
-	$file->print(pack 'Q<', $current_entries - $delete_count);
+	# # write the new number of entries to the entry table
+	# $file->seek($header->{entry_table_offset} + 8, SEEK_SET);
+	# # say "deleted $delete_count entries";
+	# $file->print(pack 'Q<', $current_entries - $delete_count);
 
 
 	$header->{used_entry_count} -= $delete_count;
@@ -560,15 +557,16 @@ sub get_entries {
 	# $file->read(my $buf, 8);
 	# my ($table_offset) = unpack 'Q<', $buf;
 
-	# go to the entries table
-	$file->seek($header->{entry_table_offset}, SEEK_SET);
-	$file->read(my $buf, 16);
-	my (undef, $current_entries) = unpack 'Q<Q<', $buf;
+	# # go to the entries table
+	# $file->seek($header->{entry_table_offset}, SEEK_SET);
+	# $file->read(my $buf, 16);
+	# my (undef, $current_entries) = unpack 'Q<Q<', $buf;
 
-	my $current_offset = $header->{entry_table_offset} + 16;
-	for (1 .. $current_entries) { # iterate entries table
+	my $current_offset = $header->{entry_table_offset};
+	$file->seek($header->{entry_table_offset}, SEEK_SET);
+	for (1 .. $header->{used_entry_count}) { # iterate entries table
 		# get the entry address
-		$file->read($buf, 8);
+		$file->read(my $buf, 8);
 		$current_offset += 8;
 		my $entry_addr = unpack 'Q<', $buf;
 

@@ -73,6 +73,9 @@ sub create_database {
 	$self->settings->{objects_types} = $self->object_types;
 	$self->settings->{objects} = [];
 
+	# make the directory if it doesn't exist
+	mkdir $self->filepath;
+
 	# write them to file, they will be read by open_database
 	my $file = IO::File->new($self->filepath . '/limestone_settings.json', 'w');
 	$file->print(encode_json $self->settings);
