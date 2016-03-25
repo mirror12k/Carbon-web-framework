@@ -22,7 +22,7 @@ A compiler for use with Carbon::Nanotube which compiles dynamic files into a per
 ## Carbon::Graphite
 A versatile templating language for Carbon::Anthracite which can seemlessly be used with regular dynamic files via the Carbon::Anthracite::Plugins::Graphite plugin
 
-check https://github.com/mirror12k/Carbon-web-framework/blob/master/Carbon/Graphite/graphite%20spec%20v0.3 for and explaination on how it works
+check https://github.com/mirror12k/Carbon-web-framework/blob/master/Carbon/Graphite/graphite%20spec%20v0.3.txt for and explaination on how it works
 
 ## Carbon::Limestone
 An effective multi-threaded 64-bit database built on top of Carbon with a plugin for easy use in Anthracite (Carbon::Anthracite::Plugins::LimestoneClient)
