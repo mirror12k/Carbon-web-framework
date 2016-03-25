@@ -6,8 +6,7 @@ use warnings;
 
 
 sub new {
-	my $class = shift;
-	my %args = @_;
+	my ($class, %args) = @_;
 	my $self = $class->SUPER::new(%args);
 
 	$self->target($args{target}) if exists $args{target};

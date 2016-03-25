@@ -4,11 +4,11 @@ use warnings;
 
 use feature 'say';
 
+use Data::Dumper;
 
 use lib '..';
 use Carbon::Limestone::Connection;
 use Carbon::Limestone::Query;
-use Data::Dumper;
 
 
 
@@ -20,11 +20,11 @@ my $error = $con->connect_client('localhost:2049');
 die $error if defined $error;
 
 
-$con->write_query(Carbon::Limestone::Query->new(
-	type => 'delete',
-	target => 'Limestone::Table=test_table',
-));
-say Dumper $con->read_result_blocking;
+# $con->write_query(Carbon::Limestone::Query->new(
+# 	type => 'delete',
+# 	target => 'Limestone::Table=test_table',
+# ));
+# say Dumper $con->read_result_blocking;
 
 
 
@@ -35,7 +35,7 @@ $con->write_query(Carbon::Limestone::Query->new(
 		columns => {
 			index => 'UINT32',
 			key => 'INT32',
-			val => 'STRING_64',
+			val => 'STRING_12',
 		}
 	},
 ));

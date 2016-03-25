@@ -170,7 +170,7 @@ sub delete {
 
 sub query {
 	my ($self, $query) = @_;
-	my $data = $query->data // return Carbon::Limestone::Result->new(type => 'error', error => 'data field required');
+	my $data = $query->data // return Carbon::Limestone::Result->new(id => $query->id, type => 'error', error => 'data field required');
 	# say "table ", $self->filepath, " got a query: ", Dumper $query;
 
 	if ($data->{type} eq 'insert') {
@@ -179,18 +179,17 @@ sub query {
 			[ map $self->pack_entry($_), @{$data->{entries}} ], # pre-pack the entry so that we aren't doing it in locked context
 		);
 		# insert returns the current number of entries in the table
-		return Carbon::Limestone::Result->new(type => 'success', data => $count);
+		return Carbon::Limestone::Result->new(id => $query->id, type => 'success', data => $count);
 	} elsif ($data->{type} eq 'get') {
 		my $entries = $self->access_table(\&get_entries, $data);
-		return Carbon::Limestone::Result->new(type => 'success', data => $entries);
+		return Carbon::Limestone::Result->new(id => $query->id, type => 'success', data => $entries);
 	} elsif ($data->{type} eq 'delete') {
 		my $count = $self->edit_table(\&delete_entries, $data);
-		return Carbon::Limestone::Result->new(type => 'success', data => $count);
+		return Carbon::Limestone::Result->new(id => $query->id, type => 'success', data => $count);
 	} else {
-		Carbon::Limestone::Result->new(type => 'error', error => "unknown table query type '$data->{type}'")
+		return Carbon::Limestone::Result->new(id => $query->id, type => 'error', error => "unknown table query type '$data->{type}'")
 	}
-
-	return Carbon::Limestone::Result->new(type => 'success', data => 'working');
+	
 }
 
 

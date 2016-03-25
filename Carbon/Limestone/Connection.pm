@@ -23,6 +23,9 @@ sub new {
 	$self->version(1);
 	$self->packet_length_bytes(2);
 	$self->payload_format('FreezeThaw');
+	$self->id_counter(0);
+
+	$self->id_cache({});
 
 	$self->is_closed(0);
 
@@ -35,6 +38,8 @@ sub new {
 sub version { @_ > 1 ? $_[0]{limestone_connection__version} = $_[1] : $_[0]{limestone_connection__version} }
 sub packet_length_bytes { @_ > 1 ? $_[0]{limestone_connection__packet_length_bytes} = $_[1] : $_[0]{limestone_connection__packet_length_bytes} }
 sub payload_format { @_ > 1 ? $_[0]{limestone_connection__payload_format} = $_[1] : $_[0]{limestone_connection__payload_format} }
+sub id_counter { @_ > 1 ? $_[0]{limestone_connection__id_counter} = $_[1] : $_[0]{limestone_connection__id_counter} }
+sub id_cache { @_ > 1 ? $_[0]{limestone_connection__id_cache} = $_[1] : $_[0]{limestone_connection__id_cache} }
 sub username { @_ > 1 ? $_[0]{limestone_connection__username} = $_[1] : $_[0]{limestone_connection__username} }
 
 sub socket { @_ > 1 ? $_[0]{limestone_connection__socket} = $_[1] : $_[0]{limestone_connection__socket} }
@@ -225,7 +230,16 @@ sub read_query {
 
 sub write_query {
 	my ($self, $query) = @_;
+
+	# set the id
+	$query->id($self->id_counter);
+	$self->id_counter($self->id_counter + 1);
+
+	# write it in serialized form
 	$self->write_packet($query->serialize);
+
+	# return the id used
+	return $query->id
 }
 
 
@@ -250,6 +264,33 @@ sub read_result_blocking {
 
 	my $res;
 	usleep (1000 * 50) until $res = $self->read_result($res);
+
+	return $res
+}
+
+sub read_result_id {
+	my ($self, $id) = @_;
+
+	# if we already have it in cache, return it
+	return delete $self->id_cache->{$id} if exists $self->id_cache->{$id};
+
+	# iterate over all pending results
+	while (my $res = $self->read_result) {
+		if ($res->id == $id) {
+			return $res
+		} else {
+			$self->id_cache->{$res->id} = $res;
+		}
+	}
+	# if we haven't found it, return undef
+	return undef
+}
+
+sub read_result_id_blocking {
+	my ($self, $id) = @_;
+
+	my $res;
+	usleep (1000 * 50) until $res = $self->read_result_id($id);
 
 	return $res
 }
