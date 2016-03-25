@@ -113,9 +113,7 @@ sub create {
 		used_entry_count => 0,
 	}, 1);
 
-	# # entry table array size, entries in table
-	# $file->print(pack 'Q<Q<', $entry_count, 0);
-	# table entries (initally all null)
+	# null pointers in entry table
 	$file->print(pack 'Q<', 0) for 1 .. $entry_count;
 	# entries (all null)
 	$file->print(pack "x$entry_size") for 1 .. $entry_count;
@@ -377,15 +375,6 @@ sub insert_entries {
 
 	# if we still have entries, it means we've reached the end of the table
 	die "corrupt table: reached end of table but still have ", scalar (@to_insert), " entries to write" if @to_insert;
-	
-	# go the the entries table
-	# $file->seek($header->{entry_table_offset}, SEEK_SET);
-	# $file->read(my $buf, 16);
-	# my ($table_length, $current_entries) = unpack 'Q<Q<', $buf;
-	# say "debug table length: $table_length, entries: $current_entries";
-	# first write the new entries count
-	# $file->seek(-8, SEEK_CUR);
-	# $file->print(pack 'Q<', $current_entries + @inserted_addresses);
 
 	$file->seek($header->{entry_table_offset} + $header->{used_entry_count} * 8, SEEK_SET); # seek to end of table
 	# now write the addresses into the entries table
@@ -417,20 +406,16 @@ sub delete_entries {
 
 	my $buf;
 
-	# # go to the entries table
-	# $file->read($buf, 16);
-	# my (undef, $current_entries) = unpack 'Q<Q<', $buf;
-
 	# iterate through the entries and find entries to delete
 	my $current_offset = $header->{entry_table_offset};
 	my @deleted_offsets;
 	my @deleted_entries;
 
-	$file->seek($header->{entry_table_offset}, SEEK_SET);
-	for (1 .. $header->{used_entry_count}) { # iterate entries table
+	for my $offset (0 .. ($header->{used_entry_count} - 1)) { # iterate entries table
+		# go to entries table
+		$file->seek($header->{entry_table_offset} + $offset * 8, SEEK_SET);
 		# get the entry address
 		$file->read($buf, 8);
-		$current_offset += 8;
 		my $entry_addr = unpack 'Q<', $buf;
 
 		# read the entry and parse it
@@ -444,9 +429,6 @@ sub delete_entries {
 			push @deleted_offsets, $current_offset - 8;
 			push @deleted_entries, $entry_addr;
 		}
-		# go back to entries table
-		$file->seek($current_offset, SEEK_SET);
-
 
 		# this can probably be optimized by reading multiple offsets at once and then jumping around to read them
 	}
@@ -486,11 +468,6 @@ sub delete_entries {
 	# if we didn't have enough replacement entries, that's completely fine
 	# since the deleted offsets are in order, we have replaced any deleted ones at the front already
 	# the back ones will be ignored because we edit the number of current entries to exclude them
-
-	# # write the new number of entries to the entry table
-	# $file->seek($header->{entry_table_offset} + 8, SEEK_SET);
-	# # say "deleted $delete_count entries";
-	# $file->print(pack 'Q<', $current_entries - $delete_count);
 
 
 	$header->{used_entry_count} -= $delete_count;
@@ -546,7 +523,7 @@ sub get_entries {
 	# some setup
 	my @results;
 	my $where_filter;
-	warn "got where data: ", Dumper $query->{where};
+
 	$where_filter = $self->compile_where_filter($query->{where}) if defined $query->{where};
 	my $entry_size = $self->table_entry_size;
 
@@ -556,20 +533,12 @@ sub get_entries {
 
 	my $header = $self->read_table_header($file, 1);
 
-	# $file->read(my $buf, 8);
-	# my ($table_offset) = unpack 'Q<', $buf;
+	for my $offset (0 .. ($header->{used_entry_count} - 1)) { # iterate entries table
+		# go to entries table
+		$file->seek($header->{entry_table_offset} + $offset * 8, SEEK_SET);
 
-	# # go to the entries table
-	# $file->seek($header->{entry_table_offset}, SEEK_SET);
-	# $file->read(my $buf, 16);
-	# my (undef, $current_entries) = unpack 'Q<Q<', $buf;
-
-	my $current_offset = $header->{entry_table_offset};
-	$file->seek($header->{entry_table_offset}, SEEK_SET);
-	for (1 .. $header->{used_entry_count}) { # iterate entries table
 		# get the entry address
 		$file->read(my $buf, 8);
-		$current_offset += 8;
 		my $entry_addr = unpack 'Q<', $buf;
 
 		# read the entry and parse it
@@ -580,9 +549,6 @@ sub get_entries {
 		unless (defined $where_filter and not $where_filter->($entry)) {
 			push @results, $entry;
 		}
-
-		# go back to entries table
-		$file->seek($current_offset, SEEK_SET);
 
 		# this can probably be optimized by reading multiple offsets at once and then jumping around to read them
 	}

@@ -88,12 +88,22 @@ $con->write_query(Carbon::Limestone::Query->new(
 	target => 'Limestone::Table=test_table',
 	data => {
 		type => 'get',
-		where => {
-			key => '> 0',
-		},
 	},
 ));
 say Dumper $con->read_result_blocking;
+
+# say Dumper $con->read_result_blocking;
+# $con->write_query(Carbon::Limestone::Query->new(
+# 	type => 'query',
+# 	target => 'Limestone::Table=test_table',
+# 	data => {
+# 		type => 'get',
+# 		where => {
+# 			key => '> 0',
+# 		},
+# 	},
+# ));
+# say Dumper $con->read_result_blocking;
 
 
 

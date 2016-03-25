@@ -33,15 +33,17 @@ my $insert_id = $client->insert(
 	{ key => 0, index => 11, val => 'mystery', },
 );
 
-my $delete_id = $client->delete( where => { val => 'eq mystery' } );
+
+my $delete_id = $client->delete( where => { val => 'eq "mystery"' } );
 
 
 my $get_id = $client->get( where => { index => '<= 6' } );
 
 
 
-say Dumper $client->result($get_id);
+say Dumper $client->result;
 say Dumper $client->result($insert_id);
+say Dumper $client->result($delete_id);
 
 
 # $con->write_query(Carbon::Limestone::Query->new(

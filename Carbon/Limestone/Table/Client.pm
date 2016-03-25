@@ -12,12 +12,14 @@ sub new {
 
 	$self->connection($connection);
 	$self->target($target);
+	$self->last_id(0);
 
 	return $self
 }
 
 sub connection { @_ > 1 ? $_[0]{table_client__connection} = $_[1] : $_[0]{table_client__connection} }
 sub target { @_ > 1 ? $_[0]{table_client__target} = $_[1] : $_[0]{table_client__target} }
+sub last_id { @_ > 1 ? $_[0]{table_client__last_id} = $_[1] : $_[0]{table_client__last_id} }
 
 sub insert {
 	my ($self, @data) = @_;
@@ -28,6 +30,7 @@ sub insert {
 		data => { type => 'insert', entries => \@data, },
 	));
 
+	$self->last_id($id);
 	return $id
 }
 
@@ -46,6 +49,8 @@ sub get {
 			%opts
 		},
 	));
+
+	$self->last_id($id);
 	return $id
 }
 
@@ -60,11 +65,15 @@ sub delete {
 			%opts
 		},
 	));
+
+	$self->last_id($id);
 	return $id
 }
 
 sub result {
 	my ($self, $id) = @_;
+
+	return $self->connection->read_result_id_blocking($self->last_id) unless defined $id;
 	return $self->connection->read_result_id_blocking($id)
 }
 
