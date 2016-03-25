@@ -107,31 +107,47 @@ sub schedule_job {
 			$req->uri->path eq '/' and
 			'upgrade' eq lc $req->header('connection') and
 			'limestone-database-connection' eq lc $req->header('upgrade') and
-			defined $req->content and $req->content ne '') {
+			defined $req->content and $req->content ne '') { # verify that the peer is requesting a limestone connection
 
 		my $data = decode_json $req->content;
 		# currently we ignore completely whatever the client sends,
 		# TODO: we should really analyze what it sends and set settings based on that
 
-		my $connection = Carbon::Limestone::Connection->new;
-		$connection->version(1);
-		$connection->packet_length_bytes(2);
-		$connection->payload_format('FreezeThaw');
-		$connection->username('guest');
-		$connection->socket($sock);
+		# say "data: ", Dumper $data;
 
-		my $res = Carbon::Response->new('101');
-		$res->header(connection => 'upgrade');
-		$res->header(upgrade => 'limestone-database-connection');
-		$res->content(encode_json $connection->serialize_settings);
-		$res->header('content-length' => length $res->content);
-		$res->header('content-type' => 'application/json');
+		if (exists $data->{username} and exists $data->{password} and defined $data->{username} and defined $data->{password} and
+				$self->database->verify_login($data->{username}, $data->{password})) { # verify the login
 
-		$sock->print($res->as_string);
+			my $connection = Carbon::Limestone::Connection->new;
+			$connection->version(1);
+			$connection->packet_length_bytes(2);
+			$connection->payload_format('FreezeThaw');
+			$connection->username($data->{username});
+			$connection->socket($sock);
 
-		$self->limestone_connections->{"$sock"} = $connection;
-		$self->limestone_selector->add($sock);
-	} else {
+			my $res = Carbon::Response->new('101');
+			$res->header(connection => 'upgrade');
+			$res->header(upgrade => 'limestone-database-connection');
+			$res->content(encode_json $connection->serialize_settings);
+			$res->header('content-length' => length $res->content);
+			$res->header('content-type' => 'application/json');
+
+
+			$self->limestone_connections->{"$sock"} = $connection;
+			$self->limestone_selector->add($sock);
+
+			$sock->print($res->as_string);
+			return 1
+		} else { # incorrect password
+			my $res = Carbon::Response->new('401');
+			$res->content('Bad Login');
+			$res->header('content-length' => length $res->content);
+			$res->header('content-type' => 'text/plain');
+
+			$sock->print($res->as_string);
+			return 0
+		}
+	} else { # not a limestone connection request
 		my $res = Carbon::Response->new('400');
 		$res->content('Bad Request');
 		$res->header('content-length' => length $res->content);

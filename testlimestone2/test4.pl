@@ -16,7 +16,7 @@ use Carbon::Limestone::Query;
 my $con = Carbon::Limestone::Connection->new;
 
 
-my $error = $con->connect_client('localhost:2049');
+my $error = $con->connect_client('localhost:2049', root => 'root');
 die $error if defined $error;
 
 

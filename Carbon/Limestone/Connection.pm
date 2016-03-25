@@ -9,6 +9,7 @@ use FreezeThaw qw/ freeze thaw /;
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use Time::HiRes 'usleep';
+use Digest::SHA qw/ sha256_hex /;
 
 use Carbon::Request;
 use Carbon::Response;
@@ -81,18 +82,24 @@ sub serialize_settings {
 
 
 sub connect_client {
-	my ($self, $hostport) = @_;
+	my ($self, $hostport, $username, $password) = @_;
+
 	my $sock = $self->socket(IO::Socket::SSL->new(
 		PeerAddr => $hostport,
 		SSL_verify_mode => SSL_VERIFY_NONE, # TODO: fix somehow
 	) or return "connection failed: $!, $SSL_ERROR");
+
+	$self->username($username);
 
 	my $req = Carbon::Request->new;
 	$req->method('GET');
 	$req->uri('/');
 	$req->header(connection => 'Upgrade');
 	$req->header(upgrade => 'limestone-database-connection');
-	$req->content(encode_json $self->serialize_settings);
+
+	my $settings = $self->serialize_settings;
+	$settings->{password} = sha256_hex($password); # todo: better password exchange mechanism
+	$req->content(encode_json $settings);
 	$req->header('content-length' => length $req->content);
 	$req->header('content-type' => 'application/json');
 
@@ -114,7 +121,7 @@ sub connect_client {
 			defined $res->header('content-length') and 0 < int $res->header('content-length')) {
 
 		my $read = $sock->read(my $body, int $res->header('content-length'));
-		return 'didnt send settings' unless defined $read and $read == int $res->header('content-length');
+		return 'server didnt send settings' unless defined $read and $read == int $res->header('content-length');
 		$res->content($body);
 		$self->set_settings(decode_json $res->content);
 
@@ -122,7 +129,7 @@ sub connect_client {
 
 		return
 	} else {
-		return 'server didnt accept the connection'
+		return 'server didnt accept the connection: ' . $res->message
 	}
 
 }

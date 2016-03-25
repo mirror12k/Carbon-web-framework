@@ -72,6 +72,8 @@ sub create_database {
 	# create basic databasebase settings	
 	$self->settings->{objects_types} = $self->object_types;
 	$self->settings->{objects} = [];
+	# default user of root/root
+	$self->settings->{users} = { root => '4813494d137e1631bba301d5acab6e7bb7aa74ce1185d456565ef51d737677b2' };
 
 	# make the directory if it doesn't exist
 	mkdir $self->filepath;
@@ -99,6 +101,8 @@ sub open_database {
 
 	$self->settings(decode_json $data);
 
+	$self->settings(shared_clone($self->settings));
+
 	$self->object_types ($self->settings->{objects_types});
 	$self->load_object($_) for @{$self->settings->{objects}};
 }
@@ -114,12 +118,31 @@ sub close_database {
 
 	# store database settings
 	$self->settings->{objects_types} = $self->object_types;
-	$self->settings->{objects} = [ keys %{$self->objects} ];
+	$self->settings->{objects} = shared_clone([ keys %{$self->objects} ]);
 
 	my $file = IO::File->new($self->filepath . '/limestone_settings.json', 'w');
 	$file->print(encode_json $self->settings);
 	$file->close;
 
+}
+
+
+sub verify_login {
+	my ($self, $username, $password) = @_;
+
+	my $users = $self->settings->{users};
+	lock ($users); # ensure that no changes will occur to it while we are working
+	if (length ($password) != length ($users->{$username})) { # check the length
+		return 0
+	} else {
+		# constant time comparison
+		my @incorrect = grep { substr ($password, $_, 1) ne substr ($users->{$username}, $_, 1) } 0 .. -1 + length $password;
+		if (@incorrect) {
+			return 0
+		} else {
+			return 1;
+		}
+	}
 }
 
 
