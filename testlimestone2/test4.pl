@@ -47,7 +47,7 @@ $con->write_query(Carbon::Limestone::Query->new(type => 'list', target => 'Limes
 say Dumper $con->read_result_blocking;
 
 $con->write_query(Carbon::Limestone::Query->new(
-	type => 'query', 
+	type => 'query',
 	target => 'Limestone::Table=test_table',
 	data => {
 		type => 'insert',
@@ -84,7 +84,7 @@ say Dumper $con->read_result_blocking;
 
 
 $con->write_query(Carbon::Limestone::Query->new(
-	type => 'query', 
+	type => 'query',
 	target => 'Limestone::Table=test_table',
 	data => {
 		type => 'get',
@@ -98,7 +98,7 @@ say Dumper $con->read_result_blocking;
 
 
 $con->write_query(Carbon::Limestone::Query->new(
-	type => 'query', 
+	type => 'query',
 	target => 'Limestone::Table=test_table',
 	data => {
 		type => 'delete',
@@ -111,7 +111,7 @@ say Dumper $con->read_result_blocking;
 
 
 $con->write_query(Carbon::Limestone::Query->new(
-	type => 'query', 
+	type => 'query',
 	target => 'Limestone::Table=test_table',
 	data => {
 		type => 'get',
@@ -122,7 +122,7 @@ say Dumper $con->read_result_blocking;
 
 
 # $con->write_query(Carbon::Limestone::Query->new(
-# 	type => 'query', 
+# 	type => 'query',
 # 	target => 'Limestone::Table=test_table',
 # 	data => {
 # 		type => 'get',
@@ -135,7 +135,7 @@ say Dumper $con->read_result_blocking;
 
 
 # $con->write_query(Carbon::Limestone::Query->new(
-# 	type => 'query', 
+# 	type => 'query',
 # 	target => 'Limestone::Table=test_table',
 # 	data => {
 # 		type => 'get',
@@ -147,7 +147,7 @@ say Dumper $con->read_result_blocking;
 # say Dumper $con->read_result_blocking;
 
 # $con->write_query(Carbon::Limestone::Query->new(
-# 	type => 'query', 
+# 	type => 'query',
 # 	target => 'Limestone::Table=test_table',
 # 	data => {
 # 		type => 'get',

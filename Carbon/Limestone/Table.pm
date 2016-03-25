@@ -56,6 +56,8 @@ sub set_entry_specs {
 # database object api:
 
 
+sub client { { package => 'Carbon::Limestone::Table::Client' } }
+
 
 sub create {
 	my ($class, $filepath, $data) = @_;
@@ -189,7 +191,7 @@ sub query {
 	} else {
 		return Carbon::Limestone::Result->new(id => $query->id, type => 'error', error => "unknown table query type '$data->{type}'")
 	}
-	
+
 }
 
 
@@ -544,6 +546,7 @@ sub get_entries {
 	# some setup
 	my @results;
 	my $where_filter;
+	warn "got where data: ", Dumper $query->{where};
 	$where_filter = $self->compile_where_filter($query->{where}) if defined $query->{where};
 	my $entry_size = $self->table_entry_size;
 

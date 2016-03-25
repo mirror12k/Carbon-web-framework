@@ -295,4 +295,29 @@ sub read_result_id_blocking {
 	return $res
 }
 
+
+
+sub client {
+	my ($self, $target, $data) = @_;
+
+	# request the client data
+	my $id = $self->write_query(Carbon::Limestone::Query->new(
+		type => 'client',
+		target => $target,
+		data => $data,
+	));
+
+	# get the result
+	my $client_data = $self->read_result_id_blocking($id);
+	die "failed to get client: " + $client_data->error unless $client_data->is_success;
+
+	# load the client package
+	eval "use " . $client_data->data->{package};
+	die "client package failed: $@" if $@;
+
+	# create the new client
+	my $client = $client_data->data->{package}->new($self, $target, $client_data->data->{data});
+	return $client
+}
+
 1;

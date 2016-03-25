@@ -1,5 +1,5 @@
 
-v0.1
+v0.2
 
 this document specifies the interface of Limestone database objects
 
@@ -17,6 +17,11 @@ each database object must implement the following api:
 		tells the object to store all of its data on disk due to to server shutdown or similar
 	$obj->delete
 		tells the object to delete all of its data and itself
+	$obj->client
+		returns a hash reference, with the 'package' key pointing to a string package name referring to the package that will be used client side
+		client package must implement a ->new method which takes the arguments of a limestone connection object and a database object name
+		additionally the hash reference returned by ->client may have a 'data' key which will be passed as the third argument to the client's ->new method
+		the rest of the client interface is up to implementation as different database objects may have very different modes of operation
 
 the Carbon::Limestone::Database will handle the loading and storing of objects on startup/shutdown,
 as well as organizing the objects by unique names and creating and destroying objects when requested by queries

@@ -156,6 +156,10 @@ sub process_query {
 		return Carbon::Limestone::Result->new(id => $query->id, type => 'error', error => 'target field necessary') unless defined $query->target;
 		return $self->query_object($query);
 
+	} elsif ($query->type eq 'client') {
+		return Carbon::Limestone::Result->new(id => $query->id, type => 'error', error => 'target field necessary') unless defined $query->target;
+		return $self->client_object($query);
+
 	} else {
 		$self->warn(1, 'invalid query type sent by peer: "' . $query->type . '"');
 		return Carbon::Limestone::Result->new(id => $query->id, type => 'error', error => 'invalid query type: "' . $query->type . '"');
@@ -205,7 +209,7 @@ sub delete_object {
 		$object->delete;
 		return 'success'
 	} else {
-		return 'object does not exist';
+		return 'object does not exist'
 	}
 }
 
@@ -229,7 +233,17 @@ sub query_object {
 	return Carbon::Limestone::Result->new(id => $query->id, type => 'error', error => 'object does not exist') unless defined $object;
 
 	# perform the query
-	return $object->query($query);
+	return $object->query($query)
+}
+
+sub client_object {
+	my ($self, $query) = @_;
+	my $path = $query->target;
+
+	my $object = $self->lock_objects (sub { $self->objects->{$path} });
+	return Carbon::Limestone::Result->new(id => $query->id, type => 'error', error => 'object does not exist') unless defined $object;
+
+	return Carbon::Limestone::Result->new(id => $query->id, type => 'success', data => $object->client($query))
 }
 
 
