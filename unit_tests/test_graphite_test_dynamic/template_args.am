@@ -1,0 +1,25 @@
+<?graphite
+
+
+#template yeti
+	not yet!
+#/
+
+#template dynamic_args
+	<div class="dynamic">@$_->@yeti</div>
+#/
+
+
+#template wrap
+	<p>@$_</p>
+#/
+
+
+@yeti
+
+@wrap->@yeti
+
+@dynamic_args->@wrap
+
+
+

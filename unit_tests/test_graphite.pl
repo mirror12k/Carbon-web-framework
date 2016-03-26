@@ -75,11 +75,46 @@ sub test_basic {
 	$success = $success and test_results($test_name =>
 		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
 		['200', '<p> it is i, the great huzzah </p>']);
+	
 	$res = $rtr->execute_dynamic_file('test_graphite_test_basic/if_else.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
 
 	$success = $success and test_results($test_name =>
 		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
 		['200', '<p>got 5:  it is greater than 1 </p><p>got -5:  it is less than 1 </p><p>got 1:  it is 1 </p>']);
+
+	$res = $rtr->execute_dynamic_file('test_graphite_test_basic/not_graphite.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
+		['200', "<html>\n<body>\n<p>hello world!</p>\n</body>\n</html>"]); # TODO: fix that stupid newline bug
+
+	warn "$test_name passed\n" if $success;
+	return $success
+}
+
+
+sub test_dynamic {
+	my $success = 1;
+	my ($res, $req);
+	my $test_name = 'test dynamic';
+
+	my $rtr = Carbon::Nanotube->new;
+	$rtr->compiler->add_plugin(Carbon::Anthracite::Plugins::Graphite->new);
+	$rtr->init_thread;
+
+	$res = $rtr->execute_dynamic_file('test_graphite_test_dynamic/template_args.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+
+	# say "got result: ", $res->as_string;
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
+		['200', 'not yet!<p>not yet!</p><div class="dynamic"><p>not yet!</p></div>']);
+
+	$res = $rtr->execute_dynamic_file('test_graphite_test_dynamic/complex_template_args.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+
+	# say "got result: ", $res->as_string;
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
+		['200', '<p>hello world!</p><ul><li>example text</li><li>hello world!</li><li>lollollol</li></ul>']);
 
 	warn "$test_name passed\n" if $success;
 	return $success
@@ -89,5 +124,6 @@ sub test_basic {
 warn "graphite testing:\n";
 
 test_basic;
+test_dynamic;
 
 warn "done\n";

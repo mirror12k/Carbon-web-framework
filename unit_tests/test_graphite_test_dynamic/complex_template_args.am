@@ -1,0 +1,44 @@
+<?graphite
+
+
+#template paragraph
+	<p>@$_</p>
+#/
+
+
+#template hash_of_templates
+	@$wrapper->$text
+#/
+
+#template hello_world
+	hello world!
+#/
+
+
+
+
+
+@hash_of_templates->{ wrapper => @paragraph, text => @hello_world }
+
+
+
+
+#template array_includer
+	<ul>
+	#foreach $_
+		<li>@$_</li>
+	#/
+	</ul>
+#/
+
+
+#template example_text
+	example text
+#/
+
+#template lollerskates
+	lollollol
+#/
+
+
+@array_includer->[ @example_text, @hello_world, @lollerskates ]
