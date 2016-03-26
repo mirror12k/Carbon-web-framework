@@ -104,17 +104,51 @@ sub test_dynamic {
 
 	$res = $rtr->execute_dynamic_file('test_graphite_test_dynamic/template_args.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
 
-	# say "got result: ", $res->as_string;
 	$success = $success and test_results($test_name =>
 		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
 		['200', 'not yet!<p>not yet!</p><div class="dynamic"><p>not yet!</p></div>']);
 
 	$res = $rtr->execute_dynamic_file('test_graphite_test_dynamic/complex_template_args.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
 
-	# say "got result: ", $res->as_string;
 	$success = $success and test_results($test_name =>
 		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
 		['200', '<p>hello world!</p><ul><li>example text</li><li>hello world!</li><li>lollollol</li></ul>']);
+
+	warn "$test_name passed\n" if $success;
+	return $success
+}
+
+
+
+
+sub test_api {
+	my $success = 1;
+	my ($res, $req);
+	my $test_name = 'test api';
+
+	my $rtr = Carbon::Nanotube->new;
+	my $graphite = Carbon::Anthracite::Plugins::Graphite->new;
+	$rtr->compiler->add_plugin($graphite);
+	$rtr->init_thread;
+
+	$res = $rtr->execute_dynamic_file('test_graphite_test_api/template_api.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
+		['200', '<p class="included">rendered from perl</p><div><p>hello world!</p></div><p>bannana : 20</p><p>apple : 50</p>']);
+
+	use HTML::Entities;
+	# can't place this in the .am file because the helper is executed before the perl code in it gets to run
+	$graphite->set_helper(escape => Carbon::Graphite::Helper->new(sub {
+		my ($helper, $engine, $text) = @_;
+		return "\$output .= '" . encode_entities($text) . "';"
+	}));
+
+	$res = $rtr->execute_dynamic_file('test_graphite_test_api/helper_api.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->content =~ s/\A\s*(.*?)\s*\Z/$1/sr],
+		['200', '&lt;magic:&gt;&amp;']);
 
 	warn "$test_name passed\n" if $success;
 	return $success
@@ -125,5 +159,6 @@ warn "graphite testing:\n";
 
 test_basic;
 test_dynamic;
+test_api;
 
 warn "done\n";

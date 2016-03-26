@@ -1,0 +1,35 @@
+<?graphite
+
+#template basic_text
+	<p>hello world!</p>
+#/
+
+#template text_includer
+	<p class="included">$_</p>
+#/
+
+#template template_includer
+	<div>@$_</div>
+#/
+
+#template product_listing
+	<p>$name : $price</p>
+#/
+
+
+?><?perl
+
+echo $graphite->render_template(text_includer => "rendered from perl");
+
+my $template = $graphite->get_template('basic_text');
+
+
+$graphite->render_template($template); # template is executed but not echoed
+
+echo $graphite->render_template(template_includer => $template);
+
+$graphite->set_template(pl => $graphite->get_template('product_listing'));
+
+echo $graphite->render_template(pl => { name => 'bannana', price => 20 });
+echo $graphite->render_template(pl => { name => 'apple', price => 50 });
+
