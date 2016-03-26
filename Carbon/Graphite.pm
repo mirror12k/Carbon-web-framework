@@ -305,7 +305,7 @@ sub compile_inc_hash {
 sub helper_template {
 	my ($helper, $engine, $text) = @_;
 
-	$text =~ s/\A\s*($graphite_name_regex(?:::$graphite_name_regex)*)\s+?//ms or die '"template" helper requires a text name at start';
+	$text =~ s/\A\s*($graphite_name_regex(?:::$graphite_name_regex)*)\s+//ms or die '"template" helper requires a text name at start';
 	my $name = $1;
 
 	my $code =
