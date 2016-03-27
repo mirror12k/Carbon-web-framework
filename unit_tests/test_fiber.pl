@@ -209,8 +209,28 @@ sub test_dir {
 
 	$res = $ua->get("http://localhost:2048/test/world.txt");
 	$success = $success and test_results($test_name =>
-		[$res->code, $res->message, $res->protocol, $res->decoded_content],
-		['200', 'OK', 'HTTP/1.1', 'hello world!']);
+		[$res->code, $res->message, $res->protocol, $res->decoded_content, $res->header('content-type')],
+		['200', 'OK', 'HTTP/1.1', 'hello world!', 'text/plain']);
+
+	$res = $ua->get("http://localhost:2048/test/world.html");
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content, $res->header('content-type')],
+		['200', 'OK', 'HTTP/1.1', 'hello world!', 'text/html']);
+
+	$res = $ua->get("http://localhost:2048/test/world.js");
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content, $res->header('content-type')],
+		['200', 'OK', 'HTTP/1.1', 'hello world!', 'application/javascript']);
+
+	$res = $ua->get("http://localhost:2048/test/world.css");
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content, $res->header('content-type')],
+		['200', 'OK', 'HTTP/1.1', 'hello world!', 'text/css']);
+
+	$res = $ua->get("http://localhost:2048/test/world.bin");
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->message, $res->protocol, $res->decoded_content, $res->header('content-type')],
+		['200', 'OK', 'HTTP/1.1', 'hello world!', 'application/octet-stream']);
 
 	$res = $ua->get("http://localhost:2048/test/");
 	$success = $success and test_results($test_name =>

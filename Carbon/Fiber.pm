@@ -9,6 +9,7 @@ use List::Util 'any';
 use File::Slurper 'read_binary';
 
 use Carbon::Response;
+use Carbon::MIME;
 
 
 
@@ -120,7 +121,7 @@ sub load_static_file {
 	$res->code($res->code // '200');
 	my $data = read_binary($filepath);
 	$res->content($data);
-	$res->header('content-type' => 'text/plain');
+	$self->set_content_type($filepath, $res);
 
 	return $res
 }
@@ -178,6 +179,8 @@ sub route_map {
 }
 
 
+# utility methods
+
 sub simplify_filepath {
 	my ($self, $filepath) = @_;
 	if ('/' eq substr $filepath, 0, 1) {
@@ -185,6 +188,13 @@ sub simplify_filepath {
 	} else {
 		return join '/', grep {$_ ne '' and $_ ne '.'} split '/', $filepath
 	}
+}
+
+sub set_content_type {
+	my ($self, $filepath, $res) = @_;
+
+	my $content_type = Carbon::MIME::get_mime_type($filepath);
+	$res->header('content-type' => $content_type) if defined $content_type;
 }
 
 
