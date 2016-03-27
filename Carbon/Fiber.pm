@@ -6,7 +6,7 @@ use warnings;
 use feature 'say';
 
 use List::Util 'any';
-use File::Slurp;
+use File::Slurper 'read_binary';
 
 use Carbon::Response;
 
@@ -113,6 +113,18 @@ sub route {
 }
 
 
+sub load_static_file {
+	my ($self, $filepath, $req, $res) = @_;
+
+	$res //= Carbon::Response->new;
+	$res->code($res->code // '200');
+	my $data = read_binary($filepath);
+	$res->content($data);
+	$res->header('content-type' => 'text/plain');
+
+	return $res
+}
+
 sub route_directory {
 	my ($self, $path, $directory, $opts) = @_;
 
@@ -127,11 +139,7 @@ sub route_directory {
 
 		if (-e $loc) { # if the location exists
 			if (-f _) { # if it's a file
-				$res //= Carbon::Response->new;
-				$res->code('200');
-				my $data = read_file($loc, binmode => ':raw');
-				$res->content($data);
-				$res->header('content-type' => 'text/plain');
+				$res = $self->load_static_file($loc, $req, $res);
 			} elsif (-d _) { # if it's a directory
 				$res //= Carbon::Response->new;
 				$res->code('403');

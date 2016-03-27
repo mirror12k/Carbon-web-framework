@@ -52,6 +52,8 @@ sub route_dynamic {
 
 	my $suffix = $opts->{suffix} // '.am'; # allows a file suffix to be appended
 	my $default_file = $opts->{default_file} // 'index'; # allows different default files to be named
+	my $executable = defined $opts->{executable} ? qr/$opts->{executable}\Z/ : qr/\.am\Z/; # specifies the types of files/file-extensions that can be executed
+
 
 	return $self->route(qr/$path.*/ => sub {
 		my ($self, $req, $res) = @_;
@@ -64,9 +66,17 @@ sub route_dynamic {
 		# say "debug loc: $loc";
 
 		if (-e -f "$loc$suffix") { # if the file exists
-			$res = $self->execute_dynamic_file("$loc$suffix", $req, $res);
+			if ("$loc$suffix" =~ $executable) { # if it's executable
+				$res = $self->execute_dynamic_file("$loc$suffix", $req, $res);
+			} else {
+				$res = $self->load_static_file("$loc$suffix", $req, $res);
+			}
 		} elsif (-d $loc and -e -f "$loc/$default_file$suffix") { # if it's a directory, but we have an index file
-			$res = $self->execute_dynamic_file("$loc/$default_file$suffix", $req, $res);
+			if ("$loc/$default_file$suffix" =~ $executable) { # if it's executable
+				$res = $self->execute_dynamic_file("$loc/$default_file$suffix", $req, $res);
+			} else {
+				$res = $self->load_static_file("$loc/$default_file$suffix", $req, $res);
+			}
 
 		} else { # otherwise it's not found
 			$res //= Carbon::Response->new;

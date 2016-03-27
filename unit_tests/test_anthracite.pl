@@ -71,19 +71,24 @@ sub test_basic {
 		[$res->code, $res->content],
 		['200', "post:\nhello=>world\ntest=>asdf\n"]);
 
-	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/post_form.am',
+	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/post_form.am', 
 		Carbon::Request->new('GET', Carbon::URI->parse('/'), { 'content-type' => ['application/x-www-form-urlencoded'] }, ''));
 
 	$success = $success and test_results($test_name =>
 		[$res->code, $res->content],
 		['200', "post:\n"]);
 
-	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/redirect.am',
-		Carbon::Request->new('GET', Carbon::URI->parse('/'), { 'content-type' => ['application/x-www-form-urlencoded'] }, ''));
+	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/redirect.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
 
 	$success = $success and test_results($test_name =>
 		[$res->code, $res->header('location')],
 		['303', "/lolredirect"]);
+
+	$res = $rtr->execute_dynamic_file('test_anthracite_test_basic/not_anthracite.am', Carbon::Request->new('GET', Carbon::URI->parse('/')));
+
+	$success = $success and test_results($test_name =>
+		[$res->code, $res->content],
+		['200', "<html><body>hello world</body></html>\n"]);
 
 
 	warn "$test_name passed\n" if $success;
