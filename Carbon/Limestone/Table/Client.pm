@@ -21,7 +21,7 @@ sub connection { @_ > 1 ? $_[0]{table_client__connection} = $_[1] : $_[0]{table_
 sub target { @_ > 1 ? $_[0]{table_client__target} = $_[1] : $_[0]{table_client__target} }
 sub last_id { @_ > 1 ? $_[0]{table_client__last_id} = $_[1] : $_[0]{table_client__last_id} }
 
-sub insert {
+sub insert_async {
 	my ($self, @data) = @_;
 
 	my $id = $self->connection->write_query(Carbon::Limestone::Query->new(
@@ -34,12 +34,14 @@ sub insert {
 	return $id
 }
 
-sub get {
+sub insert {
+	my ($self, @data) = @_;
+	$self->insert_async(@data);
+	return $self->result
+}
+
+sub get_async {
 	my ($self, %opts) = @_;
-
-	use Data::Dumper;
-
-	say Dumper \%opts;
 
 	my $id = $self->connection->write_query(Carbon::Limestone::Query->new(
 		type => 'query',
@@ -54,7 +56,13 @@ sub get {
 	return $id
 }
 
-sub delete {
+sub get {
+	my ($self, %opts) = @_;
+	$self->get_async(%opts);
+	return $self->result
+}
+
+sub delete_async {
 	my ($self, %opts) = @_;
 
 	my $id = $self->connection->write_query(Carbon::Limestone::Query->new(
@@ -68,6 +76,12 @@ sub delete {
 
 	$self->last_id($id);
 	return $id
+}
+
+sub delete {
+	my ($self, %opts) = @_;
+	$self->delete_async(%opts);
+	return $self->result
 }
 
 sub result {

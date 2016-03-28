@@ -14,10 +14,8 @@
 		my $args = $runtime->post_form;
 		my ($username, $password) = @$args{'username', 'password'};
 
-
 		my $client = $limestone->client('Limestone::Table=userdb');
-		$client->get( where => { username => "eq '$username'", password => "eq '$password'" } );
-		my $res = $client->result;
+		my $res = $client->get( where => { username => "eq '$username'", password => "eq '$password'" } );
 
 		if ($res->is_success and 0 < @{$res->data}) {
 			echo "login success";

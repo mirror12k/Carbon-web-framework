@@ -15,10 +15,8 @@
 		my ($username, $password) = @$args{'username', 'password'};
 
 		my $client = $limestone->client('Limestone::Table=userdb');
-		$client->insert({ username => $username, password => $password });
-		my $res = $client->result;
+		my $res = $client->insert({ username => $username, password => $password });
 
-		# say "got response: ", Dumper $res;
 		if ($res->is_success) {
 			echo "success";
 		} else {
