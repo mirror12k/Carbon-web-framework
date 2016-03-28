@@ -1,4 +1,4 @@
-package Carbon::Anthracite::Plugins::LimestoneClient;
+package Carbon::Anthracite::Plugins::Limestone;
 use parent 'Carbon::Anthracite::Plugin';
 use strict;
 use warnings;
@@ -16,6 +16,8 @@ sub new {
 	my $self = $class->SUPER::new;
 
 	$self->hostport($args{hostport} // die "hostport required");
+	$self->username($args{username} // die "username required");
+	$self->password($args{password} // die "password required");
 
 	return $self
 }
@@ -23,11 +25,13 @@ sub new {
 
 sub hostport { @_ > 1 ? $_[0]{anthracite_plugin_limestone__hostport} = $_[1] : $_[0]{anthracite_plugin_limestone__hostport} }
 sub client { @_ > 1 ? $_[0]{anthracite_plugin_limestone__client} = $_[1] : $_[0]{anthracite_plugin_limestone__client} }
+sub username { @_ > 1 ? $_[0]{anthracite_plugin_limestone__username} = $_[1] : $_[0]{anthracite_plugin_limestone__username} }
+sub password { @_ > 1 ? $_[0]{anthracite_plugin_limestone__password} = $_[1] : $_[0]{anthracite_plugin_limestone__password} }
 
 
 sub init_thread {
 	my ($self) = @_;
-	$self->client(Carbon::Limestone::Client->new(hostport => $self->hostport));
+	$self->client(Carbon::Limestone::Client->new(hostport => $self->hostport, username => $self->username, password => $self->password));
 }
 
 

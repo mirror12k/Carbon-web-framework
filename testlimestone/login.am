@@ -3,17 +3,22 @@
 <body>
 <?perl
 	if ($runtime->request->method eq 'GET') {
-?><form method="POST">
-<input type="text" name="username" />
-<input type="password" name="password" />
-<button>submit</button>
-</form><?perl
+?>
+<form method="POST">
+	<input type="text" name="username" />
+	<input type="password" name="password" />
+	<button>submit</button>
+</form>
+<?perl
 	} elsif ($runtime->request->method eq 'POST') {
 		my $args = $runtime->post_form;
 		my ($username, $password) = @$args{'username', 'password'};
-		use Data::Dumper;
-		my $res = $limestone->query(type => 'query', collection => 'users', data => {where => { username => "eq $username", password => "eq $password" }});
-		say "got response: ", Dumper $res;
+
+
+		my $client = $limestone->client('Limestone::Table=userdb');
+		$client->get( where => { username => "eq '$username'", password => "eq '$password'" } );
+		my $res = $client->result;
+
 		if ($res->is_success and 0 < @{$res->data}) {
 			echo "login success";
 		} else {

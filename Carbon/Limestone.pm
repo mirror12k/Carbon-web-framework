@@ -255,7 +255,7 @@ sub serve_limestone_query {
 	};
 	if ($@) {
 		$self->warn ($DEBUG_VALUE, "worker thread died: $@");
-		$ret = Carbon::Limestone::Result->new(type => 'error', error => 'worker thread died: $@');
+		$ret = Carbon::Limestone::Result->new(type => 'error', error => "worker thread died: $@");
 	}
 
 	return $ret
