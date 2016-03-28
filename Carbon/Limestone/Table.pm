@@ -120,9 +120,9 @@ sub create {
 	$file->close;
 
 
-	say "created table: $filepath";
-	say "columns: ", Dumper $self->columns;
-	say "entry size: ", Dumper $self->table_entry_size;
+	# say "created table: $filepath"; # STORAGE DEBUG
+	# say "columns: ", Dumper $self->columns; # STORAGE DEBUG
+	# say "entry size: ", Dumper $self->table_entry_size; # STORAGE DEBUG
 
 
 
@@ -143,10 +143,9 @@ sub load {
 	$self->set_entry_specs;
 	$file->close;
 
-
-	say "loaded table: $filepath";
-	say "columns: ", Dumper $self->columns;
-	say "entry size: ", Dumper $self->table_entry_size;
+	# say "loaded table: $filepath"; # STORAGE DEBUG
+	# say "columns: ", Dumper $self->columns; # STORAGE DEBUG
+	# say "entry size: ", Dumper $self->table_entry_size; # STORAGE DEBUG
 
 	return $self
 }
@@ -156,7 +155,7 @@ sub load {
 sub store {
 	my ($self) = @_;
 
-	say "stored table: " . $self->filepath;
+	# say "stored table: " . $self->filepath; # STORAGE DEBUG
 }
 
 sub delete {
@@ -164,7 +163,7 @@ sub delete {
 	# rmdir ($self->filepath);
 	rmtree($self->filepath);
 
-	say "deleted table: " . $self->filepath;
+	# say "deleted table: " . $self->filepath; # STORAGE DEBUG
 }
 
 

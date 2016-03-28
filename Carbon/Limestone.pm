@@ -208,7 +208,7 @@ sub update_thread_pool {
 
 	# check any thread pool jobs that have completed
 	foreach my $jobid ($self->thread_pool->results) {
-		say "job [$jobid] completed!"; # JOBS DEBUG
+		$self->warn($DEBUG_VALUE, "job [$jobid] completed!"); # JOBS DEBUG
 		my $res = $self->thread_pool->result($jobid);
 		my $sock = delete $self->socket_jobs->{$jobid};
 		$sock = $self->socket_data->{"$sock"}{socket};
@@ -232,7 +232,7 @@ sub schedule_limestone_query {
 
 	$self->socket_jobs->{$jobid} = "$sock"; # record the jobid for when the job is completed
 
-	say "job [$jobid] created!"; # JOBS DEBUG
+	$self->warn($DEBUG_VALUE, "job [$jobid] created!"); # JOBS DEBUG
 
 	return $jobid
 }
@@ -266,7 +266,7 @@ sub serve_limestone_query {
 sub open_database {
 	my ($self, $filepath) = @_;
 
-	$self->database(Carbon::Limestone::Database->new(filepath => $filepath, debug => 1));
+	$self->database(Carbon::Limestone::Database->new(filepath => $filepath));
 }
 
 
