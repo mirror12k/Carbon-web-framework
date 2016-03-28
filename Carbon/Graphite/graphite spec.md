@@ -1,0 +1,324 @@
+# Graphite v0.3 specification
+# what is Graphite?
+Graphite is a templating language engine with a plugin for Anthracite which compiles Graphite templating language into perl code
+for use in Anthracite. Simple and straight forward to use.
+
+dynamic files containing graphite code should be pre-compiled and your templates should all be pre-included to maximise 
+performance. this way the overhead of using templates is simply the cost of executing raw perl code that has already been compiled
+
+# Graphite templating:
+
+Graphite blocks are directive blocks that start with '<?graphite' and end with '?>' or the end of the file if no '?>' is found
+these blocks may contain html tags inside but no directive tags
+```html
+<html>
+<body>
+<?graphite
+	<p>hello world!</p>
+?>
+</body>
+</html>
+```
+
+
+words starting with a '#' are instructions to use an existing helper and any data between it and the '#/' ending it are passed to the helper
+
+
+## declaring a template:
+the 'template' helper creates a new template of the given text, the first word specified indicates the name of the template:
+```
+#template template_name
+	hello world!
+#/
+```
+template names may include a '::' to indicate a template namespace for better organization
+```
+#template my_mod::my_temp
+	<p>this is the template data</p>
+#/
+```
+
+## template variables:
+
+templates are allows to take data passed in and render it (it will automatically escapped with htmlentities):
+```
+#template argy_template
+	<h1>$title</h1>
+#/
+```
+any variables referred to by '$<name>' will automatically hash dereference the default variable '$_'
+templates can also string the default variable directly instead of dereferencing it:
+```
+#template bold_text
+	<h1>$_</h1>
+#/
+```
+
+## template inclusion:
+
+templates can invoke other templates with or without arguments to render it inside by using '@:'
+```
+#template invokes_another
+	@template_name
+#/
+```
+
+using an arrow, you can pass a variable argument or a single constant which becomes the default variable for the template
+```
+#template invokes_with_data
+	@bold_text->$my_title
+	@bold_text->'hello world'
+#/
+```
+
+to pass more data, square brackets can be used to pass an array reference of values,
+or curly brackets to pass a hash reference with the given keys
+```
+#template invokes_complex
+	@my_list_creator->[$my_mod, 'limestone', 'graphite']
+	@complex_include->{arg1 => 'asdf', arg2 => $title, arg3 => $_}
+#/
+```
+these values may be regular values or deeper hash or array references:
+```
+#template invokes_super_complex
+	@my_list_creator->[[1,2,3],[4,5,6],{ user => 'user', pass => 'ssap' }]
+	@complex_include->{
+		available => {
+			john => 'yes',
+			joe => 'yes',
+			johnson => 'no'
+		},
+		jobs => [
+			'order pizza',
+			'pay for pizza',
+			'eat pizza'
+		]
+	}
+#/
+```
+
+
+## variable template inclusion:
+to include a template from a variable simply use '@$' instead of '@', then the variable name:
+```
+#template dynamic_include
+	@$_->'hello world!'
+#/
+```
+arguments can be passed or omitted the same as regular inclusion
+
+to pass a named template as an argument to another template, simply refer to it with '@':
+```
+#template invokes_with_template
+	@dynamic_include->@bold_text
+	@another_dynamic_include->[@bold_text, @my_mod::my_temp]
+	@yet_another_dynamic_include->{ lambda => @bold_text, texter => @my_mod::my_temp }
+#/
+```
+
+
+## comments:
+comment blocks can be written by starting and ending them with '###':
+```
+#template magic
+	###
+		this is my template
+		it writes the word 'heading' in big bold letters
+		copyright trademark copyleft tariff-exempt
+	###
+	<h1>heading</h1>
+#/
+```
+
+## helper inclusion:
+
+other helpers can be invoked inside a template declaration:
+```
+#template my_list_creator
+	#foreach $items
+		<li>$_</li>
+	#/
+#/
+```
+they can return text or code which will be included as part of the template
+
+
+# built-in helpers:
+graphite comes with several useful builtin helpers:
+
+## foreach
+the 'foreach' helper takes an array ref variable argument and executes it's internal block for each item in the array reference,
+setting '$_' to the current value of the iterator
+```
+#foreach $_
+	<p>i got a string: $_</p>
+#/
+```
+
+```
+#foreach $experiences
+	<li> previous experience: $_ </p>
+#/
+```
+
+## if
+the 'if' helper evals a given expression in parenthesis and executes the inside block only if the expression returns something truthy
+```
+#if ($name eq 'john')
+	hello there john!
+#/
+```
+the 'if' helper sets the engine's else condition when executed
+specifically, it sets the else condition to true if it executed its block, and false if it didn't
+the 'else' helper reads the else condition and executes if it is true
+```
+#if ('asdf' eq 'qwerty')
+	will never be seen
+#/
+#else
+	will always be seen
+#/
+```
+additionally, the 'elsif' helper also reads the else condition and evals its expression if the else condition is met
+it sets the else condition to false only it the else condition was previously true and its expression evaluated to true,
+otherwise it sets the else condition to true
+```
+#if ('asdf' eq 'qwerty')
+	never seen
+#/
+#elsif ('asdf' eq lc 'ASDF')
+	always seen!
+#/
+#else
+	never seen again!
+#/
+```
+
+## with
+the 'with' helper sets the default variable to the given value:
+```
+#with $parent
+	name: $name
+	age: $age
+#/
+```
+
+## namespace
+the 'namespace' helper makes any templates declared or invoked inside it's body be namespaced to the given namespace
+```
+#namespace GraphiteBars
+	#template header
+		<!doctype>
+		<html>
+		<title>
+	#/
+#/
+@GraphiteBars::header
+```
+namespace declarations stack on one another, so declaring a namespace 'tools' inside of a namespace 'awesome' will
+result in the namespace being 'awesome::tools'
+note: the 'namespace' helper does not edit any text of the template declation or invokation, instead it sets the Graphite engine's current namespace value
+
+## warn
+the 'warn' helper writes any output from its block to the $runtime->warn method which should spit it out to stderr
+```
+#if (not defined $_)
+	#warn
+		not defined argument passed to template
+	#/
+#/
+```
+
+## die
+the 'die' helper works similar to the 'warn' helper only it calls $runtime->die instead of warn which will stop data from being sent to the client
+as well as sending output to stderr
+```
+#if (not defined $_)
+	#die
+		argument MUST be defined
+	#/
+#/
+```
+
+
+
+## programmable helpers:
+additional helpers can be defined programmatically
+helpers can edit the environment, be sure to view the helper's documentation
+
+if a template or document ever needs more logic than just a few ifs, the logic should go in a helper, or better yet, be placed in code somewhere else
+
+
+
+# runtime API specification:
+the graphite runtime is accessible through perl code either before the server starts, or during the execution of anthracite file
+
+## template objects:
+each template is stored as Carbon::Graphite::Template objects within the Graphite engine
+they are accessible with get_template of the Graphite plugin:
+```perl
+my $template = $graphite->get_template('template_name');
+```
+
+to set a template by name:
+```perl
+$graphite->set_template('template_name' => $template);
+```
+
+they can be individually rendered by calling render_template of the Graphite plugin:
+```perl
+echo $graphite->render_template('template_name');
+```
+
+either the name of a template, or a template object may be passed
+an argument can be passed to act as the default variable in the template:
+```perl
+echo $graphite->render_template(bold_text => 'hello world!');
+echo $graphite->render_template(some_template => [ qw/ a list of strings/ ]);
+echo $graphite->render_template(some_template => { type => 'hash ref', explanation => 'arugments to templates' });
+```
+
+## helper objects:
+helpers are stored as Carbon::Graphite::Helper objects within the Graphite engine
+helpers can be accessed or created by name:
+```perl
+my $helper = $graphite->get_helper('foreach');
+$graphite->set_helper(awesomness => Carbon::Graphite::Helper->new(sub {
+	# helper code
+}));
+```
+the subroutine passed to Carbon::Graphite::Helper will receive 3 arguments;
+the helper object itself, the Graphite engine, and the text inside the helper
+the helper must return code (or at least an empty string) which will be appended in the location it was called
+```perl
+my $helper = Carbon::Graphite::Helper->new(sub {
+	my ($helper, $engine, $text) = @_;
+	...
+	return "warn 'hello world!';"
+});
+```
+to send data to output, simply append to the '$output' variable inside the returned code:
+```perl
+return "$output .= 'my special text';"
+```
+the helper may edit the text it received in order to parse parameters
+the helper MUST not edit text inside of a helper call which is nested inside of it
+```
+#my_helper my_arg
+	this part can be edited
+	#with $var
+		this part must not be edited by the 'my_helper' helper function
+	#/
+#/
+```
+it can then pass the text to '$engine->compile_graphite' in order to compile it as proper Graphite code.
+code can access template variables by using the '$arg' variable or dereferencing it as whatever is necessary:
+```perl
+	$output .= sha256_hex $arg->{super_secret};
+```
+
+
+
+
+
